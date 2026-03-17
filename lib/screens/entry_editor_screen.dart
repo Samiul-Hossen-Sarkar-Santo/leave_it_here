@@ -51,107 +51,122 @@ class _EntryEditorScreenState extends State<EntryEditorScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isEditing ? 'Edit entry' : 'New entry'),
+        title: Text(_isEditing ? 'Journal entry' : 'Add new entry'),
         actions: [
-          if (!_isEditing)
-            IconButton(
-              onPressed: () {
-                setState(() {
-                  _lockAfterSave = !_lockAfterSave;
-                });
-              },
-              icon: Icon(_lockAfterSave ? Icons.lock : Icons.lock_open),
-              tooltip: _lockAfterSave
-                  ? 'Will lock after save'
-                  : 'Lock after save',
-            ),
-          if (_isEditing && !locked)
-            IconButton(
-              onPressed: _confirmLockForever,
-              icon: const Icon(Icons.lock),
-              tooltip: 'Lock forever',
-            ),
+          TextButton(
+            onPressed: locked ? null : _save,
+            child: const Text('Save'),
+          ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          if (locked)
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Text(
-                  'This entry is locked, so editing is no longer available.',
-                  style: Theme.of(context).textTheme.bodyMedium,
+      body: SafeArea(
+        child: Stack(
+          children: [
+            ListView(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+              children: [
+                if (locked)
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Text(
+                        'This entry is locked, so editing is no longer available.',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ),
+                  ),
+                Text(_formatDate(entry?.date ?? DateTime.now())),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _journalController,
+                  enabled: !locked,
+                  minLines: 14,
+                  maxLines: 22,
+                  decoration: const InputDecoration(
+                    hintText: 'Rant here...',
+                    border: InputBorder.none,
+                  ),
+                ),
+                if (_manualWins.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text('Wins', style: Theme.of(context).textTheme.titleSmall),
+                  const SizedBox(height: 4),
+                  ..._manualWins.map((item) => Text('• $item')),
+                  const SizedBox(height: 6),
+                  FilledButton.tonal(
+                    onPressed: locked ? null : _openWinsCallout,
+                    child: const Text('+ Add More'),
+                  ),
+                ],
+                if (_audioPath != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    _audioDurationMs == null
+                        ? 'Voice recording attached'
+                        : 'Voice recording attached (${(_audioDurationMs! / 1000).toStringAsFixed(1)}s)',
+                  ),
+                ],
+              ],
+            ),
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  border: Border(
+                    top: BorderSide(
+                      color: Theme.of(context).colorScheme.outlineVariant,
+                    ),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _actionIconButton(
+                      label: 'Breakdown',
+                      icon: _isBreakdown ? Icons.toggle_on : Icons.toggle_off,
+                      selected: _isBreakdown,
+                      onTap: locked
+                          ? null
+                          : () {
+                              setState(() {
+                                _isBreakdown = !_isBreakdown;
+                              });
+                            },
+                    ),
+                    _actionIconButton(
+                      label: 'Add Wins',
+                      icon: Icons.add,
+                      onTap: locked ? null : _openWinsCallout,
+                    ),
+                    _actionIconButton(
+                      label: 'Voice Entry',
+                      icon: Icons.mic,
+                      onTap: locked ? null : _openVoiceEntryCallout,
+                    ),
+                    _actionIconButton(
+                      label: 'Lock forever',
+                      icon: Icons.lock,
+                      selected: _isEditing ? false : _lockAfterSave,
+                      onTap: locked
+                          ? null
+                          : () {
+                              if (_isEditing) {
+                                _confirmLockForever();
+                              } else {
+                                setState(() {
+                                  _lockAfterSave = !_lockAfterSave;
+                                });
+                              }
+                            },
+                    ),
+                  ],
                 ),
               ),
             ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _journalController,
-            enabled: !locked,
-            minLines: 8,
-            maxLines: 18,
-            decoration: const InputDecoration(
-              labelText: 'Write your entry',
-              border: OutlineInputBorder(),
-              alignLabelWithHint: true,
-            ),
-          ),
-          const SizedBox(height: 12),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            value: _isBreakdown,
-            onChanged: locked
-                ? null
-                : (value) {
-                    setState(() {
-                      _isBreakdown = value;
-                    });
-                  },
-            title: const Text('Mark as breakdown entry'),
-          ),
-          const SizedBox(height: 6),
-          FilledButton.tonalIcon(
-            onPressed: locked ? null : _openWinsCallout,
-            icon: const Icon(Icons.emoji_events_outlined),
-            label: const Text('Add wins'),
-          ),
-          if (_manualWins.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            ..._manualWins.map((item) => Text('• $item')),
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: locked ? null : _openWinsCallout,
-              icon: const Icon(Icons.add),
-              label: const Text('Add more+'),
-            ),
           ],
-          const SizedBox(height: 12),
-          FilledButton.tonalIcon(
-            onPressed: locked ? null : _openVoiceEntryCallout,
-            icon: const Icon(Icons.mic_none),
-            label: const Text('Voice entry'),
-          ),
-          if (_audioPath != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              _audioDurationMs == null
-                  ? 'Voice recording attached'
-                  : 'Voice recording attached (${(_audioDurationMs! / 1000).toStringAsFixed(1)}s)',
-            ),
-          ],
-          if (!_isEditing && _lockAfterSave) ...[
-            const SizedBox(height: 8),
-            const Text('This entry will be locked after save.'),
-          ],
-          const SizedBox(height: 16),
-          FilledButton.icon(
-            onPressed: locked ? null : _save,
-            icon: const Icon(Icons.save_outlined),
-            label: Text(_isEditing ? 'Save changes' : 'Save entry'),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -159,51 +174,35 @@ class _EntryEditorScreenState extends State<EntryEditorScreen> {
   Future<void> _openWinsCallout() async {
     _winsInputController.clear();
 
-    await showModalBottomSheet<void>(
+    await showDialog<void>(
       context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
       builder: (context) {
-        final insets = MediaQuery.viewInsetsOf(context);
-        return SafeArea(
-          child: AnimatedPadding(
-            duration: const Duration(milliseconds: 150),
-            curve: Curves.easeOut,
-            padding: EdgeInsets.fromLTRB(16, 16, 16, insets.bottom + 16),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Add a win'),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _winsInputController,
-                    autofocus: true,
-                    maxLines: 2,
-                    decoration: const InputDecoration(
-                      hintText: 'Write a win',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  FilledButton(
-                    onPressed: () {
-                      final next = _winsInputController.text.trim();
-                      if (next.isEmpty) {
-                        return;
-                      }
-                      setState(() {
-                        _manualWins = [..._manualWins, next];
-                      });
-                      Navigator.pop(context);
-                    },
-                    child: const Text('Save'),
-                  ),
-                ],
-              ),
+        return AlertDialog(
+          title: const Text('Callout your win...'),
+          content: TextField(
+            controller: _winsInputController,
+            autofocus: true,
+            maxLines: 2,
+            decoration: const InputDecoration(
+              hintText: 'Record your win...',
+              border: OutlineInputBorder(),
             ),
           ),
+          actions: [
+            FilledButton(
+              onPressed: () {
+                final next = _winsInputController.text.trim();
+                if (next.isEmpty) {
+                  return;
+                }
+                setState(() {
+                  _manualWins = [..._manualWins, next];
+                });
+                Navigator.pop(context);
+              },
+              child: const Text('Save Win'),
+            ),
+          ],
         );
       },
     );
@@ -363,6 +362,59 @@ class _EntryEditorScreenState extends State<EntryEditorScreen> {
     Navigator.pop(context, true);
   }
 
+  Widget _actionIconButton({
+    required String label,
+    required IconData icon,
+    required VoidCallback? onTap,
+    bool selected = false,
+  }) {
+    final selectedBg = Theme.of(context).colorScheme.primary;
+    final selectedFg = Theme.of(context).colorScheme.onPrimary;
+    final normalBg = Theme.of(context).colorScheme.secondaryContainer;
+    final normalFg = Theme.of(context).colorScheme.onSecondaryContainer;
+
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: selected ? selectedBg : normalBg,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  icon,
+                  size: 24,
+                  color: selected ? selectedFg : normalFg,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: selected ? selectedBg : null,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    final month = _monthNames[date.month - 1];
+    return '$month ${date.day}, ${date.year}';
+  }
+
   Future<void> _save() async {
     final savedId = await c.saveEntry(
       entryId: entry?.id,
@@ -383,3 +435,18 @@ class _EntryEditorScreenState extends State<EntryEditorScreen> {
     Navigator.pop(context, true);
   }
 }
+
+const List<String> _monthNames = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];

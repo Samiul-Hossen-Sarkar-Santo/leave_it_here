@@ -43,28 +43,12 @@ class _EntryDetailScreenState extends State<EntryDetailScreen> {
     }
 
     final wins = entry.manualWins.isNotEmpty ? entry.manualWins : entry.smartHighlights;
-  _ensureAudioLoaded(entry.audioPath);
+    _ensureAudioLoaded(entry.audioPath);
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(entry.isBreakdownEntry ? 'Breakdown entry' : 'Journal entry'),
-        actions: [
-          if (!entry.isPermanentlyLocked)
-            IconButton(
-              onPressed: () => _openEditor(entry),
-              icon: const Icon(Icons.edit_outlined),
-              tooltip: 'Edit',
-            ),
-          if (!entry.isPermanentlyLocked)
-            IconButton(
-              onPressed: () => _lockForever(entry),
-              icon: const Icon(Icons.lock_outline),
-              tooltip: 'Lock forever',
-            ),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Journal entry')),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 90),
         children: [
           if (entry.isPermanentlyLocked)
             Card(
@@ -98,6 +82,32 @@ class _EntryDetailScreenState extends State<EntryDetailScreen> {
               _buildAudioPlayer(entry),
           ],
         ],
+      ),
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: FilledButton(
+                  onPressed: entry.isPermanentlyLocked
+                      ? null
+                      : () => _openEditor(entry),
+                  child: const Text('Edit'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton.tonalIcon(
+                onPressed: entry.isPermanentlyLocked
+                    ? null
+                    : () => _lockForever(entry),
+                icon: const Icon(Icons.lock),
+                label: const Text('Lock forever'),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

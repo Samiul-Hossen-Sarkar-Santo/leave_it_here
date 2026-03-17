@@ -52,12 +52,12 @@ class _AppRootState extends State<AppRoot> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final lightScheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF9AAFA9),
+      seedColor: Colors.teal,
       brightness: Brightness.light,
     ).copyWith(surface: const Color(0xFFF4F7F5));
 
     final darkScheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF9AAFA9),
+      seedColor: Colors.teal,
       brightness: Brightness.dark,
     );
 
@@ -71,7 +71,7 @@ class _AppRootState extends State<AppRoot> with WidgetsBindingObserver {
           theme: ThemeData(
             useMaterial3: true,
             colorScheme: lightScheme,
-            scaffoldBackgroundColor: const Color(0xFFEEF2EF),
+            scaffoldBackgroundColor: const Color.fromARGB(255, 235, 239, 235),
           ),
           darkTheme: ThemeData(useMaterial3: true, colorScheme: darkScheme),
           home: _controller.isLoading

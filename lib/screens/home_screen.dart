@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:table_calendar/table_calendar.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../controllers/app_controller.dart';
 import '../models/app_settings.dart';
 import '../models/breakdown_record.dart';
+import '../models/journal_entry.dart';
 import 'entry_detail_screen.dart';
 import 'entry_editor_screen.dart';
 import 'tutorial_screen.dart';
@@ -30,7 +33,16 @@ class _HomeScreenState extends State<HomeScreen> {
     final titles = ['Entries', 'Breakdowns', 'Settings'];
 
     return Scaffold(
-      appBar: AppBar(title: Text('Leave It Here · ${titles[c.selectedTab]}')),
+      appBar: AppBar(
+        title: Text(
+          titles[c.selectedTab],
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Theme.of(context).colorScheme.onPrimaryContainer,
+          ),
+        ),
+        centerTitle: true,
+      ),
       body: pages[c.selectedTab],
       bottomNavigationBar: NavigationBar(
         selectedIndex: c.selectedTab,
@@ -53,67 +65,78 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildEntriesTab(BuildContext context) {
     final entries = c.sortedEntries;
-    final accent = Theme.of(context).colorScheme.primaryContainer;
+    final accent = Theme.of(context).colorScheme.secondaryContainer;
+    final onAccent = Theme.of(context).colorScheme.onSecondaryContainer;
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         Card(
           color: accent,
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Add new entries',
-                        style: Theme.of(context).textTheme.titleMedium,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: _openNewEntry,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 45, horizontal: 20),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Add New Entry',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        color: onAccent,
+                        fontWeight: FontWeight.w700,
                       ),
-                      const SizedBox(height: 4),
-                      const Text('Write, reflect, add wins, or voice notes.'),
-                    ],
+                    ),
                   ),
-                ),
-                FilledButton.icon(
-                  onPressed: _openNewEntry,
-                  icon: const Icon(Icons.add),
-                  label: const Text('New'),
-                ),
-              ],
+                  Icon(Icons.add_circle, color: onAccent, size: 30),
+                ],
+              ),
             ),
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         Row(
           children: [
-            Text('Past entries', style: Theme.of(context).textTheme.titleLarge),
+            Text('View Sorter', style: Theme.of(context).textTheme.titleSmall),
             const Spacer(),
-            SegmentedButton<EntryViewMode>(
-              segments: const [
-                ButtonSegment(
-                  value: EntryViewMode.list,
-                  icon: Icon(Icons.view_list),
-                  label: Text('List'),
-                ),
-                ButtonSegment(
-                  value: EntryViewMode.grid,
-                  icon: Icon(Icons.grid_view),
-                  label: Text('Grid'),
-                ),
-              ],
-              selected: {c.settings.entryViewMode},
-              onSelectionChanged: (selected) async {
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              tooltip: 'Grid view',
+              onPressed: () async {
                 await c.updateSettings(
-                  c.settings.copyWith(entryViewMode: selected.first),
+                  c.settings.copyWith(entryViewMode: EntryViewMode.grid),
                 );
                 if (!mounted) {
                   return;
                 }
                 setState(() {});
               },
+              icon: Icon(
+                Icons.grid_view,
+                color: c.settings.entryViewMode == EntryViewMode.grid
+                    ? Theme.of(context).colorScheme.primary
+                    : null,
+              ),
+            ),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              tooltip: 'List view',
+              onPressed: () async {
+                await c.updateSettings(
+                  c.settings.copyWith(entryViewMode: EntryViewMode.list),
+                );
+                if (!mounted) {
+                  return;
+                }
+                setState(() {});
+              },
+              icon: Icon(
+                Icons.view_list,
+                color: c.settings.entryViewMode == EntryViewMode.list
+                    ? Theme.of(context).colorScheme.primary
+                    : null,
+              ),
             ),
           ],
         ),
@@ -147,11 +170,17 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _entryCard(BuildContext context, dynamic entry, {required bool compact}) {
+  Widget _entryCard(
+    BuildContext context,
+    JournalEntry entry, {
+    required bool compact,
+  }) {
     final winsToShow = entry.manualWins.isNotEmpty
         ? entry.manualWins
         : entry.smartHighlights;
-    final preview = entry.text.trim();
+    final preview = entry.text.trim().isEmpty
+        ? '[Voice entry]'
+        : entry.text.trim();
 
     return Card(
       child: InkWell(
@@ -164,7 +193,7 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               Text(
                 _formatDateTime(entry.date),
-                style: Theme.of(context).textTheme.labelLarge,
+                style: Theme.of(context).textTheme.labelSmall,
               ),
               const SizedBox(height: 6),
               if (entry.isBreakdownEntry)
@@ -177,20 +206,17 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               Text(
                 preview,
-                maxLines: compact ? 4 : 6,
+                maxLines: compact ? 3 : 4,
                 overflow: TextOverflow.ellipsis,
               ),
               if (!compact && winsToShow.isNotEmpty) ...[
                 const SizedBox(height: 8),
-                Text(entry.manualWins.isNotEmpty ? 'Your wins' : 'Suggested wins'),
+                Text(
+                  entry.manualWins.isNotEmpty ? 'Your wins' : 'Suggested wins',
+                ),
                 const SizedBox(height: 4),
                 ...winsToShow.take(3).map((item) => Text('• $item')),
               ],
-              if (entry.isPermanentlyLocked)
-                const Padding(
-                  padding: EdgeInsets.only(top: 8),
-                  child: Text('Locked forever'),
-                ),
             ],
           ),
         ),
@@ -204,7 +230,10 @@ class _HomeScreenState extends State<HomeScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Text('Breakdown reflections', style: Theme.of(context).textTheme.titleLarge),
+        Text(
+          'Breakdown reflections',
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
         const SizedBox(height: 8),
         Card(
           child: Padding(
@@ -218,7 +247,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   segments: const [
                     ButtonSegment(
                       value: ReflectionView.dropdown,
-                      label: Text('Dropdown'),
+                      label: Text('Grid'),
                     ),
                     ButtonSegment(
                       value: ReflectionView.calendar,
@@ -251,39 +280,47 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           )
         else
-          ...records.map((record) => _breakdownCard(context, record)),
+          GridView.builder(
+            itemCount: records.length,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+              childAspectRatio: 1.05,
+            ),
+            itemBuilder: (context, index) {
+              final record = records[index];
+              return _breakdownCard(context, record);
+            },
+          ),
       ],
     );
   }
 
   Widget _breakdownCard(BuildContext context, BreakdownRecord record) {
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(_formatDateTime(record.date)),
-            if (record.note.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Text(
-                record.note,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => _openBreakdownDetail(record.id),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(_formatDateTime(record.date)),
+              if (record.note.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(record.note, maxLines: 3, overflow: TextOverflow.ellipsis),
+              ],
+              const SizedBox(height: 8),
+              Chip(
+                label: const Text('Breakdown'),
+                visualDensity: VisualDensity.compact,
               ),
             ],
-            const SizedBox(height: 8),
-            Chip(
-              label: const Text('Breakdown'),
-              visualDensity: VisualDensity.compact,
-            ),
-            const SizedBox(height: 8),
-            TextButton.icon(
-              onPressed: () => _openBreakdownDetail(record.id),
-              icon: const Icon(Icons.open_in_new),
-              label: const Text('Open details'),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -298,7 +335,8 @@ class _HomeScreenState extends State<HomeScreen> {
           lastDay: DateTime.now().add(const Duration(days: 365)),
           focusedDay: c.calendarFocusedDay,
           selectedDayPredicate: (day) =>
-              c.calendarSelectedDay != null && isSameDay(day, c.calendarSelectedDay),
+              c.calendarSelectedDay != null &&
+              isSameDay(day, c.calendarSelectedDay),
           availableCalendarFormats: const {CalendarFormat.month: 'Month'},
           headerStyle: const HeaderStyle(formatButtonVisible: false),
           onPageChanged: (focused) {
@@ -342,7 +380,9 @@ class _HomeScreenState extends State<HomeScreen> {
     return Container(
       margin: const EdgeInsets.all(6),
       decoration: BoxDecoration(
-        color: isToday ? colorScheme.primaryContainer : colorScheme.secondaryContainer,
+        color: isToday
+            ? colorScheme.primaryContainer
+            : colorScheme.secondaryContainer,
         borderRadius: BorderRadius.circular(8),
       ),
       alignment: Alignment.center,
@@ -439,7 +479,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       if (pin == null) {
                         ScaffoldMessenger.of(this.context).showSnackBar(
                           const SnackBar(
-                            content: Text('Lock not enabled. PIN setup cancelled.'),
+                            content: Text(
+                              'Lock not enabled. PIN setup cancelled.',
+                            ),
                           ),
                         );
                         return;
@@ -583,12 +625,22 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Tutorial'),
+                const Text('Others'),
                 const SizedBox(height: 8),
-                FilledButton.tonalIcon(
-                  onPressed: _openTutorial,
-                  icon: const Icon(Icons.school_outlined),
-                  label: const Text('View tutorial'),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    FilledButton.tonalIcon(
+                      onPressed: _openTutorial,
+                      icon: const Icon(Icons.school_outlined),
+                      label: const Text('View tutorial'),
+                    ),
+                    FilledButton.tonalIcon(
+                      onPressed: _openCredits,
+                      icon: const Icon(Icons.copyright),
+                      label: const Text('Credits'),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -834,9 +886,35 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _openTutorial() async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
-        builder: (_) => TutorialScreen(
-          showSkip: false,
-          onDone: () async {},
+        builder: (_) => TutorialScreen(showSkip: false, onDone: () async {}),
+      ),
+    );
+  }
+
+  Future<void> _openCredits() async {
+    const url = 'https://samiul-hossen-sarkar-santo.web.app';
+    final uri = Uri.parse(url);
+
+    try {
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (launched || !mounted) {
+        return;
+      }
+    } catch (_) {
+      // Handled below via fallback.
+    }
+
+    await Clipboard.setData(const ClipboardData(text: url));
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Could not open browser right now. Portfolio URL copied to clipboard.',
         ),
       ),
     );
