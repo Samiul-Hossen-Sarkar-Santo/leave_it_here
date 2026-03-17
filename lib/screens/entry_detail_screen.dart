@@ -1,0 +1,261 @@
+import 'package:flutter/material.dart';
+import 'package:just_audio/just_audio.dart';
+
+import '../controllers/app_controller.dart';
+import '../models/journal_entry.dart';
+import 'entry_editor_screen.dart';
+
+class EntryDetailScreen extends StatefulWidget {
+  const EntryDetailScreen({
+    super.key,
+    required this.controller,
+    required this.entryId,
+  });
+
+  final AppController controller;
+  final String entryId;
+
+  @override
+  State<EntryDetailScreen> createState() => _EntryDetailScreenState();
+}
+
+class _EntryDetailScreenState extends State<EntryDetailScreen> {
+  AppController get c => widget.controller;
+
+  final AudioPlayer _player = AudioPlayer();
+  String? _loadedAudioPath;
+  String? _audioError;
+
+  @override
+  void dispose() {
+    _player.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final entry = c.getEntryById(widget.entryId);
+    if (entry == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Entry')),
+        body: const Center(child: Text('Entry not found.')),
+      );
+    }
+
+    final wins = entry.manualWins.isNotEmpty ? entry.manualWins : entry.smartHighlights;
+  _ensureAudioLoaded(entry.audioPath);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(entry.isBreakdownEntry ? 'Breakdown entry' : 'Journal entry'),
+        actions: [
+          if (!entry.isPermanentlyLocked)
+            IconButton(
+              onPressed: () => _openEditor(entry),
+              icon: const Icon(Icons.edit_outlined),
+              tooltip: 'Edit',
+            ),
+          if (!entry.isPermanentlyLocked)
+            IconButton(
+              onPressed: () => _lockForever(entry),
+              icon: const Icon(Icons.lock_outline),
+              tooltip: 'Lock forever',
+            ),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          if (entry.isPermanentlyLocked)
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  'This entry has been locked, so edit actions are hidden.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+            ),
+          Text(_formatDateTime(entry.date), style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 12),
+          Text(entry.text),
+          if (wins.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text(
+              entry.manualWins.isNotEmpty ? 'Your wins' : 'Suggested wins',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 6),
+            ...wins.map((item) => Text('• $item')),
+          ],
+          if ((entry.audioPath ?? '').trim().isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text('Voice note', style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 8),
+            if (_audioError != null)
+              Text(_audioError!)
+            else
+              _buildAudioPlayer(entry),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAudioPlayer(JournalEntry entry) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            StreamBuilder<PlayerState>(
+              stream: _player.playerStateStream,
+              builder: (context, snapshot) {
+                final playerState = snapshot.data;
+                final isPlaying = playerState?.playing ?? false;
+
+                return FilledButton.tonalIcon(
+                  onPressed: () async {
+                    if (isPlaying) {
+                      await _player.pause();
+                    } else {
+                      await _player.play();
+                    }
+                  },
+                  icon: Icon(isPlaying ? Icons.pause : Icons.play_arrow),
+                  label: Text(isPlaying ? 'Pause' : 'Play'),
+                );
+              },
+            ),
+            const SizedBox(height: 10),
+            StreamBuilder<Duration>(
+              stream: _player.positionStream,
+              builder: (context, snapshot) {
+                final position = snapshot.data ?? Duration.zero;
+                final duration = _player.duration ??
+                    Duration(milliseconds: entry.audioDurationMs ?? 0);
+                final totalMs = duration.inMilliseconds;
+                final posMs = position.inMilliseconds.clamp(0, totalMs == 0 ? 1 : totalMs);
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    LinearProgressIndicator(
+                      value: totalMs == 0 ? 0 : posMs / totalMs,
+                    ),
+                    const SizedBox(height: 6),
+                    Text('${_fmt(position)} / ${_fmt(duration)}'),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _ensureAudioLoaded(String? audioPath) {
+    if (audioPath == null || audioPath.trim().isEmpty) {
+      return;
+    }
+    if (_loadedAudioPath == audioPath) {
+      return;
+    }
+
+    _loadedAudioPath = audioPath;
+    _audioError = null;
+    _loadAudioPath(audioPath);
+  }
+
+  Future<void> _loadAudioPath(String audioPath) async {
+    try {
+      await _player.setFilePath(audioPath);
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _audioError = 'Could not load voice note from this device path.';
+      });
+    }
+  }
+
+  String _fmt(Duration value) {
+    final mins = value.inMinutes.toString().padLeft(2, '0');
+    final secs = (value.inSeconds % 60).toString().padLeft(2, '0');
+    return '$mins:$secs';
+  }
+
+  Future<void> _openEditor(JournalEntry entry) async {
+    await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => EntryEditorScreen(controller: c, entry: entry),
+      ),
+    );
+    if (!mounted) {
+      return;
+    }
+    setState(() {});
+  }
+
+  Future<void> _lockForever(JournalEntry entry) async {
+    final shouldLock = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Lock this entry forever?'),
+          content: const Text('After this, this entry cannot be edited.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Lock forever'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldLock != true) {
+      return;
+    }
+
+    await c.lockEntryForever(entry.id);
+    if (!mounted) {
+      return;
+    }
+    setState(() {});
+  }
+
+  String _formatDateTime(DateTime date) {
+    final month = _monthNames[date.month - 1];
+    final hour12 = date.hour == 0
+        ? 12
+        : date.hour > 12
+        ? date.hour - 12
+        : date.hour;
+    final minute = date.minute.toString().padLeft(2, '0');
+    final period = date.hour >= 12 ? 'PM' : 'AM';
+    return '${date.day} $month ${date.year}, $hour12:$minute $period';
+  }
+}
+
+const List<String> _monthNames = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];

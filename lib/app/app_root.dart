@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import '../controllers/app_controller.dart';
 import '../screens/home_screen.dart';
 import '../screens/lock_screen.dart';
+import '../screens/tutorial_screen.dart';
 import '../services/extraction_service.dart';
 import '../services/lock_service.dart';
 import '../services/storage_service.dart';
+import '../services/voice_entry_service.dart';
 
 class AppRoot extends StatefulWidget {
   const AppRoot({super.key});
@@ -25,6 +27,7 @@ class _AppRootState extends State<AppRoot> with WidgetsBindingObserver {
       storage: StorageService(),
       extraction: HeuristicExtractionService(),
       lock: LockService(),
+      voice: VoiceEntryService(),
     );
     _controller.initialize();
   }
@@ -82,6 +85,25 @@ class _AppRootState extends State<AppRoot> with WidgetsBindingObserver {
                       _controller.biometricAvailable,
                 )
               : HomeScreen(controller: _controller),
+          builder: (context, child) {
+            if (_controller.isLoading) {
+              return child ?? const SizedBox.shrink();
+            }
+
+            if (_controller.settings.hasCompletedTutorial) {
+              return child ?? const SizedBox.shrink();
+            }
+
+            return Stack(
+              children: [
+                child ?? const SizedBox.shrink(),
+                TutorialScreen(
+                  onDone: _controller.completeTutorial,
+                  popOnDone: false,
+                ),
+              ],
+            );
+          },
         );
       },
     );

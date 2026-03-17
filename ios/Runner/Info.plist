@@ -47,5 +47,9 @@
 		<true/>
 		<key>UIStatusBarHidden</key>
 		<false/>
+		<key>NSMicrophoneUsageDescription</key>
+		<string>Leave It Here uses your microphone for optional voice journal entries.</string>
+		<key>NSSpeechRecognitionUsageDescription</key>
+		<string>Leave It Here uses on-device speech recognition to transcribe your voice entries.</string>
 	</dict>
 </plist>

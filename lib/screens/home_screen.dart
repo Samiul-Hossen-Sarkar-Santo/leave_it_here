@@ -4,6 +4,9 @@ import 'package:table_calendar/table_calendar.dart';
 import '../controllers/app_controller.dart';
 import '../models/app_settings.dart';
 import '../models/breakdown_record.dart';
+import 'entry_detail_screen.dart';
+import 'entry_editor_screen.dart';
+import 'tutorial_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.controller});
@@ -15,30 +18,16 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final _journalController = TextEditingController();
-  final _manualWinsController = TextEditingController();
-  final _breakdownNoteController = TextEditingController();
-  String? _selectedBreakdownId;
-
-  @override
-  void dispose() {
-    _journalController.dispose();
-    _manualWinsController.dispose();
-    _breakdownNoteController.dispose();
-    super.dispose();
-  }
-
   AppController get c => widget.controller;
 
   @override
   Widget build(BuildContext context) {
     final pages = [
-      _buildJournalTab(context),
+      _buildEntriesTab(context),
       _buildBreakdownsTab(context),
-      _buildHistoryTab(context),
       _buildSettingsTab(context),
     ];
-    final titles = ['Journal', 'Breakdowns', 'History', 'Settings'];
+    final titles = ['Entries', 'Breakdowns', 'Settings'];
 
     return Scaffold(
       appBar: AppBar(title: Text('Leave It Here · ${titles[c.selectedTab]}')),
@@ -51,188 +40,248 @@ class _HomeScreenState extends State<HomeScreen> {
           });
         },
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.edit_note), label: 'Journal'),
+          NavigationDestination(icon: Icon(Icons.edit_note), label: 'Entries'),
           NavigationDestination(
             icon: Icon(Icons.favorite_outline),
             label: 'Breakdowns',
           ),
-          NavigationDestination(icon: Icon(Icons.history), label: 'History'),
           NavigationDestination(icon: Icon(Icons.settings), label: 'Settings'),
         ],
       ),
     );
   }
 
-  Widget _buildJournalTab(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Today\'s journal',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _journalController,
-                  maxLines: 4,
-                  decoration: const InputDecoration(
-                    labelText: 'How was today?',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _manualWinsController,
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                    labelText: 'Wins (one per line)',
-                    hintText: 'One win per line',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                FilledButton.icon(
-                  onPressed: () async {
-                    await c.addJournalEntry(
-                      journalText: _journalController.text,
-                      manualWinsMultiline: _manualWinsController.text,
-                    );
-                    _journalController.clear();
-                    _manualWinsController.clear();
-                    if (mounted) {
-                      setState(() {});
-                    }
-                  },
-                  icon: const Icon(Icons.add_task),
-                  label: const Text('Save today\'s entry'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+  Widget _buildEntriesTab(BuildContext context) {
+    final entries = c.sortedEntries;
+    final accent = Theme.of(context).colorScheme.primaryContainer;
 
-  Widget _buildBreakdownsTab(BuildContext context) {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         Card(
+          color: accent,
           child: Padding(
             padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Text(
-                  'Breakdown log',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _breakdownNoteController,
-                  maxLines: 2,
-                  decoration: const InputDecoration(
-                    labelText: 'Short note (optional)',
-                    border: OutlineInputBorder(),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Add new entries',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 4),
+                      const Text('Write, reflect, add wins, or voice notes.'),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 10),
                 FilledButton.icon(
-                  onPressed: () async {
-                    await c.addBreakdownNow(
-                      note: _breakdownNoteController.text,
-                    );
-                    _breakdownNoteController.clear();
-                    if (mounted) {
-                      setState(() {});
-                    }
-                  },
-                  icon: const Icon(Icons.bookmark_add),
-                  label: const Text('Log breakdown now'),
+                  onPressed: _openNewEntry,
+                  icon: const Icon(Icons.add),
+                  label: const Text('New'),
                 ),
               ],
             ),
           ),
         ),
         const SizedBox(height: 12),
-        Text(
-          'Breakdown reflections',
-          style: Theme.of(context).textTheme.titleLarge,
+        Row(
+          children: [
+            Text('Past entries', style: Theme.of(context).textTheme.titleLarge),
+            const Spacer(),
+            SegmentedButton<EntryViewMode>(
+              segments: const [
+                ButtonSegment(
+                  value: EntryViewMode.list,
+                  icon: Icon(Icons.view_list),
+                  label: Text('List'),
+                ),
+                ButtonSegment(
+                  value: EntryViewMode.grid,
+                  icon: Icon(Icons.grid_view),
+                  label: Text('Grid'),
+                ),
+              ],
+              selected: {c.settings.entryViewMode},
+              onSelectionChanged: (selected) async {
+                await c.updateSettings(
+                  c.settings.copyWith(entryViewMode: selected.first),
+                );
+                if (!mounted) {
+                  return;
+                }
+                setState(() {});
+              },
+            ),
+          ],
         ),
         const SizedBox(height: 8),
-        if (c.settings.reflectionView == ReflectionView.dropdown)
-          _buildDropdownView(context)
+        if (entries.isEmpty)
+          const Card(
+            child: Padding(
+              padding: EdgeInsets.all(14),
+              child: Text('No entries yet.'),
+            ),
+          )
+        else if (c.settings.entryViewMode == EntryViewMode.grid)
+          GridView.builder(
+            itemCount: entries.length,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+              childAspectRatio: 1.1,
+            ),
+            itemBuilder: (context, index) {
+              final entry = entries[index];
+              return _entryCard(context, entry, compact: true);
+            },
+          )
         else
-          _buildCalendarView(context),
+          ...entries.map((entry) => _entryCard(context, entry, compact: false)),
       ],
     );
   }
 
-  Widget _buildDropdownView(BuildContext context) {
-    if (c.breakdowns.isEmpty) {
-      return const Card(
+  Widget _entryCard(BuildContext context, dynamic entry, {required bool compact}) {
+    final winsToShow = entry.manualWins.isNotEmpty
+        ? entry.manualWins
+        : entry.smartHighlights;
+    final preview = entry.text.trim();
+
+    return Card(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => _openEntryDetail(entry.id),
         child: Padding(
-          padding: EdgeInsets.all(12),
-          child: Text('No breakdown records yet.'),
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _formatDateTime(entry.date),
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
+              const SizedBox(height: 6),
+              if (entry.isBreakdownEntry)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Chip(
+                    label: const Text('Breakdown'),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+              Text(
+                preview,
+                maxLines: compact ? 4 : 6,
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (!compact && winsToShow.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(entry.manualWins.isNotEmpty ? 'Your wins' : 'Suggested wins'),
+                const SizedBox(height: 4),
+                ...winsToShow.take(3).map((item) => Text('• $item')),
+              ],
+              if (entry.isPermanentlyLocked)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: Text('Locked forever'),
+                ),
+            ],
+          ),
         ),
-      );
-    }
+      ),
+    );
+  }
 
-    final selectedId = c.breakdowns.any((b) => b.id == _selectedBreakdownId)
-        ? _selectedBreakdownId
-        : c.breakdowns.first.id;
-    final selected = c.breakdowns.firstWhere((item) => item.id == selectedId);
+  Widget _buildBreakdownsTab(BuildContext context) {
+    final records = c.breakdowns;
 
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Text('Breakdown reflections', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 8),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Reflection view'),
+                const SizedBox(height: 8),
+                SegmentedButton<ReflectionView>(
+                  segments: const [
+                    ButtonSegment(
+                      value: ReflectionView.dropdown,
+                      label: Text('Dropdown'),
+                    ),
+                    ButtonSegment(
+                      value: ReflectionView.calendar,
+                      label: Text('Calendar'),
+                    ),
+                  ],
+                  selected: {c.settings.reflectionView},
+                  onSelectionChanged: (selected) async {
+                    await c.updateSettings(
+                      c.settings.copyWith(reflectionView: selected.first),
+                    );
+                    if (!mounted) {
+                      return;
+                    }
+                    setState(() {});
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        if (c.settings.reflectionView == ReflectionView.calendar)
+          _buildCalendarView(context)
+        else if (records.isEmpty)
+          const Card(
+            child: Padding(
+              padding: EdgeInsets.all(12),
+              child: Text('No breakdown records yet.'),
+            ),
+          )
+        else
+          ...records.map((record) => _breakdownCard(context, record)),
+      ],
+    );
+  }
+
+  Widget _breakdownCard(BuildContext context, BreakdownRecord record) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            DropdownButtonFormField<String>(
-              initialValue: selectedId,
-              decoration: const InputDecoration(
-                labelText: 'Choose breakdown',
-                border: OutlineInputBorder(),
+            Text(_formatDateTime(record.date)),
+            if (record.note.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                record.note,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
               ),
-              items: c.breakdowns
-                  .map(
-                    (record) => DropdownMenuItem<String>(
-                      value: record.id,
-                      child: Text(_formatDateTime(record.date)),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (value) {
-                if (value == null) {
-                  return;
-                }
-                setState(() {
-                  _selectedBreakdownId = value;
-                });
-              },
+            ],
+            const SizedBox(height: 8),
+            Chip(
+              label: const Text('Breakdown'),
+              visualDensity: VisualDensity.compact,
             ),
-            const SizedBox(height: 12),
-            FutureBuilder<List<String>>(
-              future: c.getBreakdownHighlights(selected),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Align(
-                    alignment: Alignment.centerLeft,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  );
-                }
-
-                final items = snapshot.data ?? [];
-                return _buildBreakdownDetail(selected, items);
-              },
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: () => _openBreakdownDetail(record.id),
+              icon: const Icon(Icons.open_in_new),
+              label: const Text('Open details'),
             ),
           ],
         ),
@@ -249,8 +298,7 @@ class _HomeScreenState extends State<HomeScreen> {
           lastDay: DateTime.now().add(const Duration(days: 365)),
           focusedDay: c.calendarFocusedDay,
           selectedDayPredicate: (day) =>
-              c.calendarSelectedDay != null &&
-              isSameDay(day, c.calendarSelectedDay),
+              c.calendarSelectedDay != null && isSameDay(day, c.calendarSelectedDay),
           availableCalendarFormats: const {CalendarFormat.month: 'Month'},
           headerStyle: const HeaderStyle(formatButtonVisible: false),
           onPageChanged: (focused) {
@@ -267,42 +315,8 @@ class _HomeScreenState extends State<HomeScreen> {
               return;
             }
 
-            await showModalBottomSheet<void>(
-              context: context,
-              builder: (context) {
-                return SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: ListView(
-                      shrinkWrap: true,
-                      children: records
-                          .map(
-                            (record) => FutureBuilder<List<String>>(
-                              future: c.getBreakdownHighlights(record),
-                              builder: (context, snapshot) {
-                                final items = snapshot.data ?? [];
-                                if (snapshot.connectionState ==
-                                    ConnectionState.waiting) {
-                                  return const Padding(
-                                    padding: EdgeInsets.all(8),
-                                    child: CircularProgressIndicator(),
-                                  );
-                                }
-                                return Card(
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(12),
-                                    child: _buildBreakdownDetail(record, items),
-                                  ),
-                                );
-                              },
-                            ),
-                          )
-                          .toList(),
-                    ),
-                  ),
-                );
-              },
-            );
+            final first = records.first;
+            _openBreakdownDetail(first.id);
           },
           calendarBuilders: CalendarBuilders(
             defaultBuilder: (context, day, _) {
@@ -328,97 +342,11 @@ class _HomeScreenState extends State<HomeScreen> {
     return Container(
       margin: const EdgeInsets.all(6),
       decoration: BoxDecoration(
-        color: isToday
-            ? colorScheme.primaryContainer
-            : colorScheme.secondaryContainer,
+        color: isToday ? colorScheme.primaryContainer : colorScheme.secondaryContainer,
         borderRadius: BorderRadius.circular(8),
       ),
       alignment: Alignment.center,
       child: Text('${day.day}'),
-    );
-  }
-
-  Widget _buildBreakdownDetail(BreakdownRecord record, List<String> items) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(_formatDateTime(record.date)),
-        if (record.note.isNotEmpty) ...[
-          const SizedBox(height: 6),
-          Text(record.note),
-        ],
-        const SizedBox(height: 8),
-        const Text('Top wins in this breakdown window:'),
-        const SizedBox(height: 6),
-        if (items.isEmpty)
-          const Text('No highlights available yet.')
-        else
-          ...items.map((item) => Text('• $item')),
-      ],
-    );
-  }
-
-  Widget _buildHistoryTab(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        if (c.entries.isEmpty)
-          const Card(
-            child: Padding(
-              padding: EdgeInsets.all(14),
-              child: Text('No entries yet.'),
-            ),
-          ),
-        ...c.entries.map((entry) {
-          final winsToShow = entry.manualWins.isNotEmpty
-              ? entry.manualWins
-              : entry.smartHighlights;
-          return Card(
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(_formatDateTime(entry.date)),
-                  const SizedBox(height: 6),
-                  Text(entry.text),
-                  if (winsToShow.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      entry.manualWins.isNotEmpty ? 'Your wins' : 'Suggested wins',
-                    ),
-                    ...winsToShow.map((item) => Text('• $item')),
-                  ],
-                  const SizedBox(height: 8),
-                  TextButton.icon(
-                    onPressed: () async {
-                      final initial = winsToShow.join('\n');
-                      final updated = await _askWinsMultiline(
-                        context,
-                        title: 'Edit wins',
-                        initialValue: initial,
-                      );
-                      if (updated == null) {
-                        return;
-                      }
-                      await c.updateEntryWins(
-                        entryId: entry.id,
-                        manualWinsMultiline: updated,
-                      );
-                      if (!mounted) {
-                        return;
-                      }
-                      setState(() {});
-                    },
-                    icon: const Icon(Icons.edit_note),
-                    label: const Text('Edit wins'),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }),
-      ],
     );
   }
 
@@ -480,86 +408,6 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Theme mode'),
-                const SizedBox(height: 8),
-                SegmentedButton<AppThemeMode>(
-                  segments: const [
-                    ButtonSegment(
-                      value: AppThemeMode.system,
-                      label: Text('System'),
-                    ),
-                    ButtonSegment(
-                      value: AppThemeMode.light,
-                      label: Text('Light'),
-                    ),
-                    ButtonSegment(
-                      value: AppThemeMode.dark,
-                      label: Text('Dark'),
-                    ),
-                  ],
-                  selected: {c.settings.themeMode},
-                  onSelectionChanged: (selected) async {
-                    await c.updateSettings(
-                      c.settings.copyWith(themeMode: selected.first),
-                    );
-                  },
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Breakdown reflections'),
-                const SizedBox(height: 8),
-                SegmentedButton<ReflectionView>(
-                  segments: const [
-                    ButtonSegment(
-                      value: ReflectionView.dropdown,
-                      label: Text('Dropdown'),
-                    ),
-                    ButtonSegment(
-                      value: ReflectionView.calendar,
-                      label: Text('Calendar'),
-                    ),
-                  ],
-                  selected: {c.settings.reflectionView},
-                  onSelectionChanged: (selected) async {
-                    await c.updateSettings(
-                      c.settings.copyWith(reflectionView: selected.first),
-                    );
-                  },
-                ),
-                const SizedBox(height: 10),
-                Text('Wins per breakdown: ${c.settings.winsPerBreakdown}'),
-                Slider(
-                  value: c.settings.winsPerBreakdown.toDouble(),
-                  min: 1,
-                  max: 12,
-                  divisions: 11,
-                  label: '${c.settings.winsPerBreakdown}',
-                  onChanged: (value) async {
-                    await c.updateSettings(
-                      c.settings.copyWith(winsPerBreakdown: value.round()),
-                    );
-                  },
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
                 const Text('App lock'),
                 const SizedBox(height: 8),
                 SwitchListTile(
@@ -580,10 +428,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     }
 
                     if (!hasPin) {
-                      if (!mounted) {
-                        return;
-                      }
-
                       final pin = await _askPinWithConfirmation(
                         this.context,
                         title: 'Set PIN before enabling lock',
@@ -595,9 +439,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       if (pin == null) {
                         ScaffoldMessenger.of(this.context).showSnackBar(
                           const SnackBar(
-                            content: Text(
-                              'Lock not enabled. PIN setup cancelled.',
-                            ),
+                            content: Text('Lock not enabled. PIN setup cancelled.'),
                           ),
                         );
                         return;
@@ -650,10 +492,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     }
 
                     if (hasPin) {
-                      if (!mounted) {
-                        return;
-                      }
-
                       final currentPin = await _askPinOnly(
                         this.context,
                         title: 'Enter current PIN',
@@ -679,10 +517,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       }
                     }
 
-                    if (!mounted) {
-                      return;
-                    }
-
                     final pin = await _askPinWithConfirmation(
                       this.context,
                       title: 'Set PIN (4-8 digits)',
@@ -702,6 +536,59 @@ class _HomeScreenState extends State<HomeScreen> {
                     );
                   },
                   child: const Text('Set / Change PIN'),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Theme mode'),
+                const SizedBox(height: 8),
+                SegmentedButton<AppThemeMode>(
+                  segments: const [
+                    ButtonSegment(
+                      value: AppThemeMode.system,
+                      label: Text('System'),
+                    ),
+                    ButtonSegment(
+                      value: AppThemeMode.light,
+                      label: Text('Light'),
+                    ),
+                    ButtonSegment(
+                      value: AppThemeMode.dark,
+                      label: Text('Dark'),
+                    ),
+                  ],
+                  selected: {c.settings.themeMode},
+                  onSelectionChanged: (selected) async {
+                    await c.updateSettings(
+                      c.settings.copyWith(themeMode: selected.first),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Tutorial'),
+                const SizedBox(height: 8),
+                FilledButton.tonalIcon(
+                  onPressed: _openTutorial,
+                  icon: const Icon(Icons.school_outlined),
+                  label: const Text('View tutorial'),
                 ),
               ],
             ),
@@ -849,42 +736,110 @@ class _HomeScreenState extends State<HomeScreen> {
     return value;
   }
 
-  Future<String?> _askWinsMultiline(
-    BuildContext context, {
-    required String title,
-    required String initialValue,
-  }) async {
-    final controller = TextEditingController(text: initialValue);
+  Future<void> _openNewEntry() async {
+    await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => EntryEditorScreen(controller: c)),
+    );
+    if (!mounted) {
+      return;
+    }
+    setState(() {});
+  }
 
-    final result = await showDialog<String>(
+  Future<void> _openEntryDetail(String entryId) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => EntryDetailScreen(controller: c, entryId: entryId),
+      ),
+    );
+    if (!mounted) {
+      return;
+    }
+    setState(() {});
+  }
+
+  Future<void> _openBreakdownDetail(String breakdownId) async {
+    final record = c.breakdowns.firstWhere((item) => item.id == breakdownId);
+    final linked = c.findEntryForBreakdown(breakdownId);
+
+    await showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
       builder: (context) {
-        return AlertDialog(
-          title: Text(title),
-          content: TextField(
-            controller: controller,
-            maxLines: 8,
-            decoration: const InputDecoration(
-              labelText: 'Wins (one per line)',
-              border: OutlineInputBorder(),
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: FutureBuilder<List<String>>(
+              future: c.getBreakdownHighlights(record),
+              builder: (context, snapshot) {
+                final items = snapshot.data ?? [];
+                return ListView(
+                  shrinkWrap: true,
+                  children: [
+                    Text(
+                      'Breakdown details',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(_formatDateTime(record.date)),
+                    if (record.note.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(record.note),
+                    ],
+                    const SizedBox(height: 12),
+                    const Text('Top wins in this breakdown window:'),
+                    const SizedBox(height: 6),
+                    if (snapshot.connectionState == ConnectionState.waiting)
+                      const CircularProgressIndicator(strokeWidth: 2)
+                    else if (items.isEmpty)
+                      const Text('No highlights available yet.')
+                    else
+                      ...items.map((item) => Text('• $item')),
+                    const SizedBox(height: 12),
+                    if (linked != null && !linked.isPermanentlyLocked)
+                      FilledButton.icon(
+                        onPressed: () async {
+                          Navigator.pop(context);
+                          await Navigator.of(this.context).push<bool>(
+                            MaterialPageRoute(
+                              builder: (_) => EntryEditorScreen(
+                                controller: c,
+                                entry: linked,
+                              ),
+                            ),
+                          );
+                          if (!mounted) {
+                            return;
+                          }
+                          setState(() {});
+                        },
+                        icon: const Icon(Icons.edit_outlined),
+                        label: const Text('Edit'),
+                      ),
+                    if (linked != null && linked.isPermanentlyLocked)
+                      const Text(
+                        'This linked breakdown entry is locked, so edit is unavailable.',
+                      ),
+                  ],
+                );
+              },
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, controller.text),
-              child: const Text('Save'),
-            ),
-          ],
         );
       },
     );
+  }
 
-    controller.dispose();
-    return result;
+  Future<void> _openTutorial() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => TutorialScreen(
+          showSkip: false,
+          onDone: () async {},
+        ),
+      ),
+    );
   }
 
   String _formatDateTime(DateTime date) {

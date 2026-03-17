@@ -8,19 +8,23 @@ import '../models/reflection_cache.dart';
 import '../services/extraction_service.dart';
 import '../services/lock_service.dart';
 import '../services/storage_service.dart';
+import '../services/voice_entry_service.dart';
 
 class AppController extends ChangeNotifier {
   AppController({
     required StorageService storage,
     required ExtractionService extraction,
     required LockService lock,
+    required VoiceEntryService voice,
   }) : _storage = storage,
        _extraction = extraction,
-       _lock = lock;
+       _lock = lock,
+       _voice = voice;
 
   final StorageService _storage;
   final ExtractionService _extraction;
   final LockService _lock;
+  final VoiceEntryService _voice;
 
   bool _loading = true;
   bool _locked = false;
@@ -106,10 +110,49 @@ class AppController extends ChangeNotifier {
   Future<void> addJournalEntry({
     required String journalText,
     required String manualWinsMultiline,
+    bool isBreakdownEntry = false,
+    String? transcript,
+    String? audioPath,
+    int? audioDurationMs,
   }) async {
-    final text = journalText.trim();
-    if (text.isEmpty) {
-      return;
+    await saveEntry(
+      journalText: journalText,
+      manualWinsMultiline: manualWinsMultiline,
+      isBreakdownEntry: isBreakdownEntry,
+      transcript: transcript,
+      audioPath: audioPath,
+      audioDurationMs: audioDurationMs,
+    );
+  }
+
+  Future<String?> saveEntry({
+    String? entryId,
+    required String journalText,
+    required String manualWinsMultiline,
+    required bool isBreakdownEntry,
+    String? transcript,
+    String? audioPath,
+    int? audioDurationMs,
+  }) async {
+    final initialText = journalText.trim();
+    final transcriptTrimmed = transcript?.trim();
+    final hasAudio = audioPath != null && audioPath.trim().isNotEmpty;
+    final hasTranscript = transcriptTrimmed != null && transcriptTrimmed.isNotEmpty;
+    if (initialText.isEmpty &&
+      !hasTranscript &&
+        !hasAudio) {
+      return null;
+    }
+
+    final text = initialText.isEmpty && (hasAudio || hasTranscript)
+      ? '[Voice entry]'
+      : initialText;
+
+    final existingIndex =
+        entryId == null ? -1 : entries.indexWhere((entry) => entry.id == entryId);
+    final existing = existingIndex == -1 ? null : entries[existingIndex];
+    if (existing?.isPermanentlyLocked == true) {
+      return null;
     }
 
     final manualWins = manualWinsMultiline
@@ -119,23 +162,55 @@ class AppController extends ChangeNotifier {
         .toList();
 
     final smartHighlights = await _extraction.extractJournalWins(
-      journalText: text,
+      journalText: [text, transcriptTrimmed]
+          .whereType<String>()
+          .where((it) => it.isNotEmpty)
+          .join('\n'),
       manualWins: manualWins,
     );
 
+    var breakdownRecordId = existing?.breakdownRecordId;
+    if (isBreakdownEntry && breakdownRecordId == null) {
+      final record = BreakdownRecord(
+        id: DateTime.now().microsecondsSinceEpoch.toString(),
+        date: DateTime.now(),
+        note: text,
+      );
+      breakdowns = [record, ...breakdowns]..sort((a, b) => b.date.compareTo(a.date));
+      await _storage.saveBreakdowns(breakdowns);
+      breakdownRecordId = record.id;
+    }
+
+    if (!isBreakdownEntry) {
+      breakdownRecordId = null;
+    }
+
     final entry = JournalEntry(
-      id: DateTime.now().microsecondsSinceEpoch.toString(),
-      date: DateTime.now(),
+      id: existing?.id ?? DateTime.now().microsecondsSinceEpoch.toString(),
+      date: existing?.date ?? DateTime.now(),
       text: text,
       manualWins: manualWins,
       smartHighlights: smartHighlights,
+      isBreakdownEntry: isBreakdownEntry,
+      isPermanentlyLocked: existing?.isPermanentlyLocked ?? false,
+      breakdownRecordId: breakdownRecordId,
+      audioPath: audioPath ?? existing?.audioPath,
+      audioDurationMs: audioDurationMs ?? existing?.audioDurationMs,
+      transcript: transcriptTrimmed ?? existing?.transcript,
     );
 
-    entries = [entry, ...entries]..sort((a, b) => b.date.compareTo(a.date));
+    if (existingIndex == -1) {
+      entries = [entry, ...entries]..sort((a, b) => b.date.compareTo(a.date));
+    } else {
+      entries[existingIndex] = entry;
+      entries.sort((a, b) => b.date.compareTo(a.date));
+    }
+
     await _storage.saveEntries(entries);
     reflectionCache = {};
     await _storage.saveReflectionCache(reflectionCache);
     notifyListeners();
+    return entry.id;
   }
 
   Future<void> updateEntryWins({
@@ -159,10 +234,11 @@ class AppController extends ChangeNotifier {
       manualWins: manualWins,
     );
 
-    final updated = JournalEntry(
-      id: current.id,
-      date: current.date,
-      text: current.text,
+    if (current.isPermanentlyLocked) {
+      return;
+    }
+
+    final updated = current.copyWith(
       manualWins: manualWins,
       smartHighlights: smartHighlights,
     );
@@ -175,16 +251,99 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> addBreakdownNow({required String note}) async {
-    final record = BreakdownRecord(
-      id: DateTime.now().microsecondsSinceEpoch.toString(),
-      date: DateTime.now(),
+    await saveEntry(
+      journalText: note,
+      manualWinsMultiline: '',
+      isBreakdownEntry: true,
+    );
+  }
+
+  Future<void> lockEntryForever(String entryId) async {
+    final index = entries.indexWhere((entry) => entry.id == entryId);
+    if (index == -1) {
+      return;
+    }
+
+    final current = entries[index];
+    if (current.isPermanentlyLocked) {
+      return;
+    }
+
+    entries[index] = current.copyWith(isPermanentlyLocked: true);
+    await _storage.saveEntries(entries);
+    notifyListeners();
+  }
+
+  Future<void> completeTutorial() async {
+    if (settings.hasCompletedTutorial) {
+      return;
+    }
+    settings = settings.copyWith(hasCompletedTutorial: true);
+    await _storage.saveSettings(settings);
+    notifyListeners();
+  }
+
+  Future<void> updateBreakdownNote({
+    required String breakdownId,
+    required String note,
+  }) async {
+    final index = breakdowns.indexWhere((item) => item.id == breakdownId);
+    if (index == -1) {
+      return;
+    }
+
+    final current = breakdowns[index];
+    breakdowns[index] = BreakdownRecord(
+      id: current.id,
+      date: current.date,
       note: note.trim(),
     );
 
-    breakdowns = [record, ...breakdowns]
-      ..sort((a, b) => b.date.compareTo(a.date));
     await _storage.saveBreakdowns(breakdowns);
     notifyListeners();
+  }
+
+  Future<bool> startVoiceCapture({
+    void Function(String transcript)? onTranscript,
+  }) {
+    return _voice.startCapture(onTranscript: onTranscript);
+  }
+
+  Future<VoiceCaptureResult?> stopVoiceCapture() {
+    return _voice.stopCapture();
+  }
+
+  Future<void> cancelVoiceCapture() {
+    return _voice.cancelCapture();
+  }
+
+  List<JournalEntry> get sortedEntries {
+    final out = [...entries];
+    out.sort((a, b) => b.date.compareTo(a.date));
+    return out;
+  }
+
+  JournalEntry? getEntryById(String entryId) {
+    final index = entries.indexWhere((entry) => entry.id == entryId);
+    if (index == -1) {
+      return null;
+    }
+    return entries[index];
+  }
+
+  JournalEntry? findEntryForBreakdown(String breakdownId) {
+    for (final entry in entries) {
+      if (entry.breakdownRecordId == breakdownId) {
+        return entry;
+      }
+    }
+    return null;
+  }
+
+  @override
+  void dispose() {
+    _voice.dispose();
+    super.dispose();
   }
 
   Future<void> updateSettings(AppSettings next) async {

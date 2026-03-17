@@ -11,13 +11,21 @@ class StorageService {
   Future<SharedPreferences> get _prefs async => SharedPreferences.getInstance();
 
   Future<List<JournalEntry>> loadEntries() async {
-    final raw = (await _prefs).getString(_StorageKeys.entries);
+    final prefs = await _prefs;
+    var raw = prefs.getString(_StorageKeys.entries);
+    raw ??= prefs.getString(_StorageKeys.entriesLegacyV2);
     if (raw == null) {
       return [];
     }
-    return (jsonDecode(raw) as List<dynamic>)
+
+    final parsed = (jsonDecode(raw) as List<dynamic>)
         .map((item) => JournalEntry.fromJson(item as Map<String, dynamic>))
         .toList();
+
+    if (prefs.getString(_StorageKeys.entries) == null) {
+      await saveEntries(parsed);
+    }
+    return parsed;
   }
 
   Future<List<BreakdownRecord>> loadBreakdowns() async {
@@ -51,6 +59,8 @@ class StorageService {
     final reflectionRaw =
         prefs.getString(_StorageKeys.reflectionView) ?? ReflectionView.dropdown.name;
     final themeRaw = prefs.getString(_StorageKeys.themeMode) ?? AppThemeMode.light.name;
+    final entryViewRaw =
+      prefs.getString(_StorageKeys.entryViewMode) ?? EntryViewMode.grid.name;
 
     return AppSettings(
       dailyReminderEnabled: prefs.getBool(_StorageKeys.reminderEnabled) ?? true,
@@ -68,6 +78,12 @@ class StorageService {
       lockEnabled: prefs.getBool(_StorageKeys.lockEnabled) ?? false,
       biometricEnabled: prefs.getBool(_StorageKeys.biometricEnabled) ?? true,
       lockTimeoutMinutes: prefs.getInt(_StorageKeys.lockTimeoutMinutes) ?? 5,
+      entryViewMode: EntryViewMode.values.firstWhere(
+        (it) => it.name == entryViewRaw,
+        orElse: () => EntryViewMode.grid,
+      ),
+      hasCompletedTutorial:
+          prefs.getBool(_StorageKeys.hasCompletedTutorial) ?? false,
     );
   }
 
@@ -101,11 +117,17 @@ class StorageService {
     await prefs.setBool(_StorageKeys.lockEnabled, settings.lockEnabled);
     await prefs.setBool(_StorageKeys.biometricEnabled, settings.biometricEnabled);
     await prefs.setInt(_StorageKeys.lockTimeoutMinutes, settings.lockTimeoutMinutes);
+    await prefs.setString(_StorageKeys.entryViewMode, settings.entryViewMode.name);
+    await prefs.setBool(
+      _StorageKeys.hasCompletedTutorial,
+      settings.hasCompletedTutorial,
+    );
   }
 }
 
 class _StorageKeys {
-  static const entries = 'entries_v2';
+  static const entries = 'entries_v3';
+  static const entriesLegacyV2 = 'entries_v2';
   static const breakdowns = 'breakdowns_v2';
   static const reflectionCache = 'reflection_cache_v1';
   static const reminderHour = 'reminder_hour_v2';
@@ -117,4 +139,6 @@ class _StorageKeys {
   static const lockEnabled = 'lock_enabled_v1';
   static const biometricEnabled = 'biometric_enabled_v1';
   static const lockTimeoutMinutes = 'lock_timeout_minutes_v1';
+  static const entryViewMode = 'entry_view_mode_v1';
+  static const hasCompletedTutorial = 'has_completed_tutorial_v1';
 }

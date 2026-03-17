@@ -2,6 +2,8 @@ enum ReflectionView { dropdown, calendar }
 
 enum AppThemeMode { system, light, dark }
 
+enum EntryViewMode { list, grid }
+
 class AppSettings {
   const AppSettings({
     required this.dailyReminderEnabled,
@@ -13,6 +15,8 @@ class AppSettings {
     required this.lockEnabled,
     required this.biometricEnabled,
     required this.lockTimeoutMinutes,
+    required this.entryViewMode,
+    required this.hasCompletedTutorial,
   });
 
   final bool dailyReminderEnabled;
@@ -24,6 +28,8 @@ class AppSettings {
   final bool lockEnabled;
   final bool biometricEnabled;
   final int lockTimeoutMinutes;
+  final EntryViewMode entryViewMode;
+  final bool hasCompletedTutorial;
 
   static const defaults = AppSettings(
     dailyReminderEnabled: true,
@@ -35,6 +41,8 @@ class AppSettings {
     lockEnabled: false,
     biometricEnabled: true,
     lockTimeoutMinutes: 5,
+    entryViewMode: EntryViewMode.grid,
+    hasCompletedTutorial: false,
   );
 
   AppSettings copyWith({
@@ -47,6 +55,8 @@ class AppSettings {
     bool? lockEnabled,
     bool? biometricEnabled,
     int? lockTimeoutMinutes,
+    EntryViewMode? entryViewMode,
+    bool? hasCompletedTutorial,
   }) {
     return AppSettings(
       dailyReminderEnabled: dailyReminderEnabled ?? this.dailyReminderEnabled,
@@ -58,6 +68,8 @@ class AppSettings {
       lockEnabled: lockEnabled ?? this.lockEnabled,
       biometricEnabled: biometricEnabled ?? this.biometricEnabled,
       lockTimeoutMinutes: lockTimeoutMinutes ?? this.lockTimeoutMinutes,
+      entryViewMode: entryViewMode ?? this.entryViewMode,
+      hasCompletedTutorial: hasCompletedTutorial ?? this.hasCompletedTutorial,
     );
   }
 }
