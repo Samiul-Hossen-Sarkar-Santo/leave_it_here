@@ -37,7 +37,7 @@ dependencies:
   awesome_notifications: ^0.10.1
   shared_preferences: ^2.3.3
   table_calendar: ^3.2.0
-  local_auth: ^2.3.0
+  local_auth: ^3.0.1
   flutter_secure_storage: ^9.2.4
   crypto: ^3.0.6
 

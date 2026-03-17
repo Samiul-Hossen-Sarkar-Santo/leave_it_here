@@ -9,7 +9,7 @@ class LockScreen extends StatefulWidget {
   });
 
   final Future<bool> Function(String pin) onPinUnlock;
-  final Future<bool> Function() onBiometricUnlock;
+  final Future<String?> Function() onBiometricUnlock;
   final bool showBiometric;
 
   @override
@@ -53,7 +53,7 @@ class _LockScreenState extends State<LockScreen> {
       _error = null;
     });
 
-    final ok = await widget.onBiometricUnlock();
+    final errorMessage = await widget.onBiometricUnlock();
 
     if (!mounted) {
       return;
@@ -61,8 +61,8 @@ class _LockScreenState extends State<LockScreen> {
 
     setState(() {
       _working = false;
-      if (!ok) {
-        _error = 'Biometric authentication failed';
+      if (errorMessage != null) {
+        _error = errorMessage;
       }
     });
   }

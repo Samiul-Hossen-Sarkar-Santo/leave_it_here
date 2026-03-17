@@ -8,30 +8,87 @@ import 'package:local_auth/local_auth.dart';
 class LockService {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   final LocalAuthentication _localAuth = LocalAuthentication();
+  String? _lastBiometricMessage;
 
   static const _pinSaltKey = 'app_lock_pin_salt_v1';
   static const _pinHashKey = 'app_lock_pin_hash_v1';
+
+  String? get lastBiometricMessage => _lastBiometricMessage;
 
   Future<bool> hasPin() async {
     return (await _secureStorage.read(key: _pinHashKey)) != null;
   }
 
   Future<bool> canUseBiometric() async {
-    final canCheck = await _localAuth.canCheckBiometrics;
-    final isSupported = await _localAuth.isDeviceSupported();
-    return canCheck || isSupported;
+    try {
+      final isSupported = await _localAuth.isDeviceSupported();
+      if (!isSupported) {
+        _lastBiometricMessage = 'Device does not support biometric auth';
+        return false;
+      }
+
+      final canCheck = await _localAuth.canCheckBiometrics;
+      if (!canCheck) {
+        _lastBiometricMessage = 'Biometric hardware unavailable';
+        return false;
+      }
+
+      final available = await _localAuth.getAvailableBiometrics();
+      if (available.isEmpty) {
+        _lastBiometricMessage = 'No biometrics enrolled on this device';
+        return false;
+      }
+
+      _lastBiometricMessage = 'Biometrics ready';
+      return true;
+    } on LocalAuthException catch (e) {
+      _lastBiometricMessage = 'Biometric error: ${e.code.name}';
+      return false;
+    } catch (_) {
+      _lastBiometricMessage = 'Biometric check failed';
+      return false;
+    }
   }
 
   Future<bool> authenticateBiometric() async {
     try {
-      return await _localAuth.authenticate(
+      final ok = await _localAuth.authenticate(
         localizedReason: 'Authenticate to unlock your journal',
-        options: const AuthenticationOptions(
-          stickyAuth: true,
-          biometricOnly: false,
-        ),
+        biometricOnly: true,
+        persistAcrossBackgrounding: true,
       );
+
+      if (ok) {
+        _lastBiometricMessage = 'Biometric authentication successful';
+        return true;
+      }
+
+      final fallbackOk = await _localAuth.authenticate(
+        localizedReason: 'Authenticate to unlock your journal',
+        biometricOnly: false,
+        persistAcrossBackgrounding: true,
+      );
+
+      _lastBiometricMessage = fallbackOk
+          ? 'Authentication successful'
+          : 'Authentication canceled or failed';
+      return fallbackOk;
+    } on LocalAuthException catch (e) {
+      if (e.code == LocalAuthExceptionCode.noBiometricHardware) {
+        _lastBiometricMessage = 'Biometric hardware not supported';
+      } else if (e.code == LocalAuthExceptionCode.noBiometricsEnrolled) {
+        _lastBiometricMessage = 'No biometrics enrolled on this device';
+      } else if (e.code == LocalAuthExceptionCode.temporaryLockout) {
+        _lastBiometricMessage = 'Biometric temporarily locked. Try again shortly.';
+      } else if (e.code == LocalAuthExceptionCode.biometricLockout) {
+        _lastBiometricMessage =
+            'Biometric locked out. Unlock device and try again.';
+      } else {
+        _lastBiometricMessage = 'Biometric error: ${e.code.name}';
+      }
+      return false;
     } catch (_) {
+      _lastBiometricMessage = 'Biometric authentication failed';
       return false;
     }
   }

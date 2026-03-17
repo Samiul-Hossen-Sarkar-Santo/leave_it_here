@@ -517,7 +517,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   contentPadding: EdgeInsets.zero,
                   value: c.settings.biometricEnabled,
                   title: const Text('Use biometric when available'),
-                  subtitle: Text(c.biometricAvailable ? 'Available' : 'Unavailable'),
+                  subtitle: Text(c.biometricStatus),
                   onChanged: c.biometricAvailable
                       ? (value) async {
                           await c.updateSettings(
@@ -525,6 +525,20 @@ class _HomeScreenState extends State<HomeScreen> {
                           );
                         }
                       : null,
+                ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: () async {
+                      await c.refreshBiometricAvailability();
+                      if (!mounted) {
+                        return;
+                      }
+                      setState(() {});
+                    },
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Recheck biometric status'),
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Text('Lock timeout: ${c.settings.lockTimeoutMinutes} min'),
@@ -542,19 +556,60 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(height: 8),
                 FilledButton.tonal(
                   onPressed: () async {
+                    final hasPin = await c.hasPin();
+                    if (!mounted) {
+                      return;
+                    }
+
+                    if (hasPin) {
+                      if (!mounted) {
+                        return;
+                      }
+
+                      final currentPin = await _askPinOnly(
+                        this.context,
+                        title: 'Enter current PIN',
+                      );
+                      if (!mounted) {
+                        return;
+                      }
+                      if (currentPin == null || currentPin.isEmpty) {
+                        return;
+                      }
+
+                      final verified = await c.verifyPin(currentPin);
+                      if (!mounted) {
+                        return;
+                      }
+                      if (!verified) {
+                        ScaffoldMessenger.of(this.context).showSnackBar(
+                          const SnackBar(content: Text('Current PIN is incorrect')),
+                        );
+                        return;
+                      }
+                    }
+
+                    if (!mounted) {
+                      return;
+                    }
+
                     final pin = await _askPinWithConfirmation(
-                      context,
+                      this.context,
                       title: 'Set PIN (4-8 digits)',
                     );
+                    if (!mounted) {
+                      return;
+                    }
                     if (pin == null) {
                       return;
                     }
                     await c.setPin(pin);
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('PIN updated')),
-                      );
+                    if (!mounted) {
+                      return;
                     }
+                    ScaffoldMessenger.of(this.context).showSnackBar(
+                      const SnackBar(content: Text('PIN updated')),
+                    );
                   },
                   child: const Text('Set / Change PIN'),
                 ),
@@ -644,6 +699,53 @@ class _HomeScreenState extends State<HomeScreen> {
                       ? () => Navigator.pop(context, pinValue)
                       : null,
                   child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    return value;
+  }
+
+  Future<String?> _askPinOnly(
+    BuildContext context, {
+    required String title,
+  }) async {
+    var pinValue = '';
+
+    final value = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final pinValid = pinValue.length >= 4 && pinValue.length <= 8;
+            return AlertDialog(
+              title: Text(title),
+              content: TextField(
+                obscureText: true,
+                keyboardType: TextInputType.number,
+                maxLength: 8,
+                decoration: const InputDecoration(
+                  labelText: 'PIN',
+                  counterText: '',
+                ),
+                onChanged: (value) {
+                  setDialogState(() {
+                    pinValue = value.trim();
+                  });
+                },
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: pinValid ? () => Navigator.pop(context, pinValue) : null,
+                  child: const Text('Continue'),
                 ),
               ],
             );

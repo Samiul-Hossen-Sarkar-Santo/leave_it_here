@@ -25,6 +25,7 @@ class AppController extends ChangeNotifier {
   bool _loading = true;
   bool _locked = false;
   bool _biometricAvailable = false;
+  String _biometricStatus = 'Not checked';
   DateTime? _pausedAt;
 
   int selectedTab = 0;
@@ -39,6 +40,7 @@ class AppController extends ChangeNotifier {
   bool get isLoading => _loading;
   bool get isLocked => _locked;
   bool get biometricAvailable => _biometricAvailable;
+  String get biometricStatus => _biometricStatus;
 
   ThemeMode get themeMode {
     switch (settings.themeMode) {
@@ -62,7 +64,7 @@ class AppController extends ChangeNotifier {
     reflectionCache = await _storage.loadReflectionCache();
     settings = await _storage.loadSettings();
 
-    _biometricAvailable = await _lock.canUseBiometric();
+    await refreshBiometricAvailability(notify: false);
     _loading = false;
     _locked = settings.lockEnabled;
 
@@ -71,6 +73,15 @@ class AppController extends ChangeNotifier {
     }
 
     notifyListeners();
+  }
+
+  Future<void> refreshBiometricAvailability({bool notify = true}) async {
+    _biometricAvailable = await _lock.canUseBiometric();
+    _biometricStatus = _lock.lastBiometricMessage ??
+        (_biometricAvailable ? 'Biometrics ready' : 'Biometrics unavailable');
+    if (notify) {
+      notifyListeners();
+    }
   }
 
   Future<void> _initNotifications() async {
@@ -247,17 +258,35 @@ class AppController extends ChangeNotifier {
   }
 
   Future<bool> unlockWithBiometric() async {
+    if (!_biometricAvailable) {
+      await refreshBiometricAvailability();
+      return false;
+    }
+
     final ok = await _lock.authenticateBiometric();
+    _biometricStatus = _lock.lastBiometricMessage ??
+        (ok ? 'Biometric authentication successful' : 'Biometric authentication failed');
+
     if (ok) {
       _locked = false;
-      notifyListeners();
     }
+    notifyListeners();
     return ok;
+  }
+
+  Future<String?> tryBiometricUnlockWithMessage() async {
+    final ok = await unlockWithBiometric();
+    if (ok) {
+      return null;
+    }
+    return biometricStatus;
   }
 
   Future<void> setPin(String pin) async {
     await _lock.setPin(pin);
   }
+
+  Future<bool> verifyPin(String pin) => _lock.verifyPin(pin);
 
   Future<bool> hasPin() => _lock.hasPin();
 
@@ -266,6 +295,8 @@ class AppController extends ChangeNotifier {
   }
 
   void onResumed() {
+    refreshBiometricAvailability();
+
     if (!settings.lockEnabled || _pausedAt == null) {
       return;
     }

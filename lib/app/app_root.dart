@@ -79,7 +79,7 @@ class _AppRootState extends State<AppRoot> with WidgetsBindingObserver {
               : _controller.isLocked
               ? LockScreen(
                   onPinUnlock: _controller.unlockWithPin,
-                  onBiometricUnlock: _controller.unlockWithBiometric,
+                  onBiometricUnlock: _controller.tryBiometricUnlockWithMessage,
                   showBiometric:
                       _controller.settings.biometricEnabled &&
                       _controller.biometricAvailable,
