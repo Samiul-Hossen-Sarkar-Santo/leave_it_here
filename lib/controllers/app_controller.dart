@@ -77,7 +77,8 @@ class AppController extends ChangeNotifier {
 
   Future<void> refreshBiometricAvailability({bool notify = true}) async {
     _biometricAvailable = await _lock.canUseBiometric();
-    _biometricStatus = _lock.lastBiometricMessage ??
+    _biometricStatus =
+        _lock.lastBiometricMessage ??
         (_biometricAvailable ? 'Biometrics ready' : 'Biometrics unavailable');
     if (notify) {
       notifyListeners();
@@ -132,8 +133,44 @@ class AppController extends ChangeNotifier {
 
     entries = [entry, ...entries]..sort((a, b) => b.date.compareTo(a.date));
     await _storage.saveEntries(entries);
+    reflectionCache = {};
+    await _storage.saveReflectionCache(reflectionCache);
+    notifyListeners();
+  }
 
-    await _saveReflectionCache({});
+  Future<void> updateEntryWins({
+    required String entryId,
+    required String manualWinsMultiline,
+  }) async {
+    final index = entries.indexWhere((entry) => entry.id == entryId);
+    if (index == -1) {
+      return;
+    }
+
+    final current = entries[index];
+    final manualWins = manualWinsMultiline
+        .split('\n')
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList();
+
+    final smartHighlights = await _extraction.extractJournalWins(
+      journalText: current.text,
+      manualWins: manualWins,
+    );
+
+    final updated = JournalEntry(
+      id: current.id,
+      date: current.date,
+      text: current.text,
+      manualWins: manualWins,
+      smartHighlights: smartHighlights,
+    );
+
+    entries[index] = updated;
+    await _storage.saveEntries(entries);
+    reflectionCache = {};
+    await _storage.saveReflectionCache(reflectionCache);
     notifyListeners();
   }
 
@@ -144,7 +181,8 @@ class AppController extends ChangeNotifier {
       note: note.trim(),
     );
 
-    breakdowns = [record, ...breakdowns]..sort((a, b) => b.date.compareTo(a.date));
+    breakdowns = [record, ...breakdowns]
+      ..sort((a, b) => b.date.compareTo(a.date));
     await _storage.saveBreakdowns(breakdowns);
     notifyListeners();
   }
@@ -190,13 +228,6 @@ class AppController extends ChangeNotifier {
   }
 
   Future<List<String>> getBreakdownHighlights(BreakdownRecord record) async {
-    final cached = reflectionCache[record.id];
-    if (cached != null &&
-        cached.journalWatermark == journalWatermark &&
-        cached.winsPerBreakdown == settings.winsPerBreakdown) {
-      return cached.highlights;
-    }
-
     final ascending = [...breakdowns]..sort((a, b) => a.date.compareTo(b.date));
     final selectedIndex = ascending.indexWhere((item) => item.id == record.id);
 
@@ -207,10 +238,19 @@ class AppController extends ChangeNotifier {
 
     final inWindow = entries.where((entry) {
       final afterPrevious = previous == null || entry.date.isAfter(previous);
-      final untilCurrent = entry.date.isBefore(record.date) ||
+      final untilCurrent =
+          entry.date.isBefore(record.date) ||
           entry.date.isAtSameMomentAs(record.date);
       return afterPrevious && untilCurrent;
     }).toList();
+
+    final windowWatermark = _watermarkForEntries(inWindow);
+    final cached = reflectionCache[record.id];
+    if (cached != null &&
+        cached.journalWatermark == windowWatermark &&
+        cached.winsPerBreakdown == settings.winsPerBreakdown) {
+      return cached.highlights;
+    }
 
     final generated = await _extraction.summarizeBreakdownWindow(
       selectedBreakdown: record,
@@ -222,7 +262,7 @@ class AppController extends ChangeNotifier {
     reflectionCache[record.id] = ReflectionCache(
       breakdownId: record.id,
       highlights: generated,
-      journalWatermark: journalWatermark,
+      journalWatermark: windowWatermark,
       winsPerBreakdown: settings.winsPerBreakdown,
     );
 
@@ -233,6 +273,15 @@ class AppController extends ChangeNotifier {
   Future<void> _saveReflectionCache(Map<String, ReflectionCache> cache) async {
     reflectionCache = cache;
     await _storage.saveReflectionCache(reflectionCache);
+  }
+
+  String _watermarkForEntries(List<JournalEntry> records) {
+    if (records.isEmpty) {
+      return 'empty_window';
+    }
+
+    records.sort((a, b) => b.date.compareTo(a.date));
+    return '${records.first.date.microsecondsSinceEpoch}_${records.length}';
   }
 
   List<BreakdownRecord> breakdownsOnDay(DateTime day) {
@@ -264,8 +313,11 @@ class AppController extends ChangeNotifier {
     }
 
     final ok = await _lock.authenticateBiometric();
-    _biometricStatus = _lock.lastBiometricMessage ??
-        (ok ? 'Biometric authentication successful' : 'Biometric authentication failed');
+    _biometricStatus =
+        _lock.lastBiometricMessage ??
+        (ok
+            ? 'Biometric authentication successful'
+            : 'Biometric authentication failed');
 
     if (ok) {
       _locked = false;

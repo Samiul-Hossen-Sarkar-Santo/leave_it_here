@@ -26,12 +26,12 @@ class AppSettings {
   final int lockTimeoutMinutes;
 
   static const defaults = AppSettings(
-    dailyReminderEnabled: false,
-    reminderHour: 20,
-    reminderMinute: 30,
+    dailyReminderEnabled: true,
+    reminderHour: 21,
+    reminderMinute: 0,
     reflectionView: ReflectionView.dropdown,
     winsPerBreakdown: 5,
-    themeMode: AppThemeMode.system,
+    themeMode: AppThemeMode.light,
     lockEnabled: false,
     biometricEnabled: true,
     lockTimeoutMinutes: 5,

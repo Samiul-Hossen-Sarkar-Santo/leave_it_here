@@ -18,6 +18,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final _journalController = TextEditingController();
   final _manualWinsController = TextEditingController();
   final _breakdownNoteController = TextEditingController();
+  String? _selectedBreakdownId;
 
   @override
   void dispose() {
@@ -51,7 +52,10 @@ class _HomeScreenState extends State<HomeScreen> {
         },
         destinations: const [
           NavigationDestination(icon: Icon(Icons.edit_note), label: 'Journal'),
-          NavigationDestination(icon: Icon(Icons.favorite_outline), label: 'Breakdowns'),
+          NavigationDestination(
+            icon: Icon(Icons.favorite_outline),
+            label: 'Breakdowns',
+          ),
           NavigationDestination(icon: Icon(Icons.history), label: 'History'),
           NavigationDestination(icon: Icon(Icons.settings), label: 'Settings'),
         ],
@@ -69,7 +73,10 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Today\'s journal', style: Theme.of(context).textTheme.titleMedium),
+                Text(
+                  'Today\'s journal',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
                 const SizedBox(height: 10),
                 TextField(
                   controller: _journalController,
@@ -123,7 +130,10 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Breakdown log', style: Theme.of(context).textTheme.titleMedium),
+                Text(
+                  'Breakdown log',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
                 const SizedBox(height: 10),
                 TextField(
                   controller: _breakdownNoteController,
@@ -136,7 +146,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(height: 10),
                 FilledButton.icon(
                   onPressed: () async {
-                    await c.addBreakdownNow(note: _breakdownNoteController.text);
+                    await c.addBreakdownNow(
+                      note: _breakdownNoteController.text,
+                    );
                     _breakdownNoteController.clear();
                     if (mounted) {
                       setState(() {});
@@ -150,7 +162,10 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         const SizedBox(height: 12),
-        Text('Breakdown reflections', style: Theme.of(context).textTheme.titleLarge),
+        Text(
+          'Breakdown reflections',
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
         const SizedBox(height: 8),
         if (c.settings.reflectionView == ReflectionView.dropdown)
           _buildDropdownView(context)
@@ -170,34 +185,58 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    return Column(
-      children: c.breakdowns.map((record) {
-        return Card(
-          child: ExpansionTile(
-            title: Text(_formatDateTime(record.date)),
-            childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            children: [
-              FutureBuilder<List<String>>(
-                future: c.getBreakdownHighlights(record),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Align(
-                      alignment: Alignment.centerLeft,
-                      child: Padding(
-                        padding: EdgeInsets.only(top: 8),
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    );
-                  }
+    final selectedId = c.breakdowns.any((b) => b.id == _selectedBreakdownId)
+        ? _selectedBreakdownId
+        : c.breakdowns.first.id;
+    final selected = c.breakdowns.firstWhere((item) => item.id == selectedId);
 
-                  final items = snapshot.data ?? [];
-                  return _buildBreakdownDetail(record, items);
-                },
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            DropdownButtonFormField<String>(
+              initialValue: selectedId,
+              decoration: const InputDecoration(
+                labelText: 'Choose breakdown',
+                border: OutlineInputBorder(),
               ),
-            ],
-          ),
-        );
-      }).toList(),
+              items: c.breakdowns
+                  .map(
+                    (record) => DropdownMenuItem<String>(
+                      value: record.id,
+                      child: Text(_formatDateTime(record.date)),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value == null) {
+                  return;
+                }
+                setState(() {
+                  _selectedBreakdownId = value;
+                });
+              },
+            ),
+            const SizedBox(height: 12),
+            FutureBuilder<List<String>>(
+              future: c.getBreakdownHighlights(selected),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Align(
+                    alignment: Alignment.centerLeft,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  );
+                }
+
+                final items = snapshot.data ?? [];
+                return _buildBreakdownDetail(selected, items);
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -210,7 +249,8 @@ class _HomeScreenState extends State<HomeScreen> {
           lastDay: DateTime.now().add(const Duration(days: 365)),
           focusedDay: c.calendarFocusedDay,
           selectedDayPredicate: (day) =>
-              c.calendarSelectedDay != null && isSameDay(day, c.calendarSelectedDay),
+              c.calendarSelectedDay != null &&
+              isSameDay(day, c.calendarSelectedDay),
           availableCalendarFormats: const {CalendarFormat.month: 'Month'},
           headerStyle: const HeaderStyle(formatButtonVisible: false),
           onPageChanged: (focused) {
@@ -236,25 +276,27 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: ListView(
                       shrinkWrap: true,
                       children: records
-                          .map((record) => FutureBuilder<List<String>>(
-                                future: c.getBreakdownHighlights(record),
-                                builder: (context, snapshot) {
-                                  final items = snapshot.data ?? [];
-                                  if (snapshot.connectionState ==
-                                      ConnectionState.waiting) {
-                                    return const Padding(
-                                      padding: EdgeInsets.all(8),
-                                      child: CircularProgressIndicator(),
-                                    );
-                                  }
-                                  return Card(
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(12),
-                                      child: _buildBreakdownDetail(record, items),
-                                    ),
+                          .map(
+                            (record) => FutureBuilder<List<String>>(
+                              future: c.getBreakdownHighlights(record),
+                              builder: (context, snapshot) {
+                                final items = snapshot.data ?? [];
+                                if (snapshot.connectionState ==
+                                    ConnectionState.waiting) {
+                                  return const Padding(
+                                    padding: EdgeInsets.all(8),
+                                    child: CircularProgressIndicator(),
                                   );
-                                },
-                              ))
+                                }
+                                return Card(
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(12),
+                                    child: _buildBreakdownDetail(record, items),
+                                  ),
+                                );
+                              },
+                            ),
+                          )
                           .toList(),
                     ),
                   ),
@@ -286,7 +328,9 @@ class _HomeScreenState extends State<HomeScreen> {
     return Container(
       margin: const EdgeInsets.all(6),
       decoration: BoxDecoration(
-        color: isToday ? colorScheme.primaryContainer : colorScheme.secondaryContainer,
+        color: isToday
+            ? colorScheme.primaryContainer
+            : colorScheme.secondaryContainer,
         borderRadius: BorderRadius.circular(8),
       ),
       alignment: Alignment.center,
@@ -326,6 +370,9 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ...c.entries.map((entry) {
+          final winsToShow = entry.manualWins.isNotEmpty
+              ? entry.manualWins
+              : entry.smartHighlights;
           return Card(
             child: Padding(
               padding: const EdgeInsets.all(14),
@@ -335,11 +382,37 @@ class _HomeScreenState extends State<HomeScreen> {
                   Text(_formatDateTime(entry.date)),
                   const SizedBox(height: 6),
                   Text(entry.text),
-                  if (entry.smartHighlights.isNotEmpty) ...[
+                  if (winsToShow.isNotEmpty) ...[
                     const SizedBox(height: 8),
-                    const Text('Extracted wins'),
-                    ...entry.smartHighlights.map((item) => Text('• $item')),
+                    Text(
+                      entry.manualWins.isNotEmpty ? 'Your wins' : 'Suggested wins',
+                    ),
+                    ...winsToShow.map((item) => Text('• $item')),
                   ],
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: () async {
+                      final initial = winsToShow.join('\n');
+                      final updated = await _askWinsMultiline(
+                        context,
+                        title: 'Edit wins',
+                        initialValue: initial,
+                      );
+                      if (updated == null) {
+                        return;
+                      }
+                      await c.updateEntryWins(
+                        entryId: entry.id,
+                        manualWinsMultiline: updated,
+                      );
+                      if (!mounted) {
+                        return;
+                      }
+                      setState(() {});
+                    },
+                    icon: const Icon(Icons.edit_note),
+                    label: const Text('Edit wins'),
+                  ),
                 ],
               ),
             ),
@@ -369,7 +442,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     'At ${_formatTime(c.settings.reminderHour, c.settings.reminderMinute)}',
                   ),
                   onChanged: (value) async {
-                    await c.updateSettings(c.settings.copyWith(dailyReminderEnabled: value));
+                    await c.updateSettings(
+                      c.settings.copyWith(dailyReminderEnabled: value),
+                    );
                   },
                 ),
                 TextButton.icon(
@@ -409,13 +484,24 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(height: 8),
                 SegmentedButton<AppThemeMode>(
                   segments: const [
-                    ButtonSegment(value: AppThemeMode.system, label: Text('System')),
-                    ButtonSegment(value: AppThemeMode.light, label: Text('Light')),
-                    ButtonSegment(value: AppThemeMode.dark, label: Text('Dark')),
+                    ButtonSegment(
+                      value: AppThemeMode.system,
+                      label: Text('System'),
+                    ),
+                    ButtonSegment(
+                      value: AppThemeMode.light,
+                      label: Text('Light'),
+                    ),
+                    ButtonSegment(
+                      value: AppThemeMode.dark,
+                      label: Text('Dark'),
+                    ),
                   ],
                   selected: {c.settings.themeMode},
                   onSelectionChanged: (selected) async {
-                    await c.updateSettings(c.settings.copyWith(themeMode: selected.first));
+                    await c.updateSettings(
+                      c.settings.copyWith(themeMode: selected.first),
+                    );
                   },
                 ),
               ],
@@ -433,12 +519,20 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(height: 8),
                 SegmentedButton<ReflectionView>(
                   segments: const [
-                    ButtonSegment(value: ReflectionView.dropdown, label: Text('Dropdown')),
-                    ButtonSegment(value: ReflectionView.calendar, label: Text('Calendar')),
+                    ButtonSegment(
+                      value: ReflectionView.dropdown,
+                      label: Text('Dropdown'),
+                    ),
+                    ButtonSegment(
+                      value: ReflectionView.calendar,
+                      label: Text('Calendar'),
+                    ),
                   ],
                   selected: {c.settings.reflectionView},
                   onSelectionChanged: (selected) async {
-                    await c.updateSettings(c.settings.copyWith(reflectionView: selected.first));
+                    await c.updateSettings(
+                      c.settings.copyWith(reflectionView: selected.first),
+                    );
                   },
                 ),
                 const SizedBox(height: 10),
@@ -474,7 +568,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   title: const Text('Enable app lock'),
                   onChanged: (value) async {
                     if (!value) {
-                      await c.updateSettings(c.settings.copyWith(lockEnabled: false));
+                      await c.updateSettings(
+                        c.settings.copyWith(lockEnabled: false),
+                      );
                       return;
                     }
 
@@ -499,7 +595,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       if (pin == null) {
                         ScaffoldMessenger.of(this.context).showSnackBar(
                           const SnackBar(
-                            content: Text('Lock not enabled. PIN setup cancelled.'),
+                            content: Text(
+                              'Lock not enabled. PIN setup cancelled.',
+                            ),
                           ),
                         );
                         return;
@@ -509,7 +607,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     }
 
                     if (hasPin) {
-                      await c.updateSettings(c.settings.copyWith(lockEnabled: true));
+                      await c.updateSettings(
+                        c.settings.copyWith(lockEnabled: true),
+                      );
                     }
                   },
                 ),
@@ -517,7 +617,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   contentPadding: EdgeInsets.zero,
                   value: c.settings.biometricEnabled,
                   title: const Text('Use biometric when available'),
-                  subtitle: Text(c.biometricAvailable ? 'Available' : 'Unavailable'),
+                  subtitle: Text(
+                    c.biometricAvailable ? 'Available' : 'Unavailable',
+                  ),
                   onChanged: c.biometricAvailable
                       ? (value) async {
                           await c.updateSettings(
@@ -569,7 +671,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       }
                       if (!verified) {
                         ScaffoldMessenger.of(this.context).showSnackBar(
-                          const SnackBar(content: Text('Current PIN is incorrect')),
+                          const SnackBar(
+                            content: Text('Current PIN is incorrect'),
+                          ),
                         );
                         return;
                       }
@@ -730,7 +834,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: const Text('Cancel'),
                 ),
                 FilledButton(
-                  onPressed: pinValid ? () => Navigator.pop(context, pinValue) : null,
+                  onPressed: pinValid
+                      ? () => Navigator.pop(context, pinValue)
+                      : null,
                   child: const Text('Continue'),
                 ),
               ],
@@ -741,6 +847,44 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     return value;
+  }
+
+  Future<String?> _askWinsMultiline(
+    BuildContext context, {
+    required String title,
+    required String initialValue,
+  }) async {
+    final controller = TextEditingController(text: initialValue);
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(title),
+          content: TextField(
+            controller: controller,
+            maxLines: 8,
+            decoration: const InputDecoration(
+              labelText: 'Wins (one per line)',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, controller.text),
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+
+    controller.dispose();
+    return result;
   }
 
   String _formatDateTime(DateTime date) {

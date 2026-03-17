@@ -50,12 +50,12 @@ class StorageService {
 
     final reflectionRaw =
         prefs.getString(_StorageKeys.reflectionView) ?? ReflectionView.dropdown.name;
-    final themeRaw = prefs.getString(_StorageKeys.themeMode) ?? AppThemeMode.system.name;
+    final themeRaw = prefs.getString(_StorageKeys.themeMode) ?? AppThemeMode.light.name;
 
     return AppSettings(
-      dailyReminderEnabled: prefs.getBool(_StorageKeys.reminderEnabled) ?? false,
-      reminderHour: prefs.getInt(_StorageKeys.reminderHour) ?? 20,
-      reminderMinute: prefs.getInt(_StorageKeys.reminderMinute) ?? 30,
+      dailyReminderEnabled: prefs.getBool(_StorageKeys.reminderEnabled) ?? true,
+      reminderHour: prefs.getInt(_StorageKeys.reminderHour) ?? 21,
+      reminderMinute: prefs.getInt(_StorageKeys.reminderMinute) ?? 0,
       reflectionView: ReflectionView.values.firstWhere(
         (it) => it.name == reflectionRaw,
         orElse: () => ReflectionView.dropdown,
@@ -63,7 +63,7 @@ class StorageService {
       winsPerBreakdown: prefs.getInt(_StorageKeys.winsPerBreakdown) ?? 5,
       themeMode: AppThemeMode.values.firstWhere(
         (it) => it.name == themeRaw,
-        orElse: () => AppThemeMode.system,
+        orElse: () => AppThemeMode.light,
       ),
       lockEnabled: prefs.getBool(_StorageKeys.lockEnabled) ?? false,
       biometricEnabled: prefs.getBool(_StorageKeys.biometricEnabled) ?? true,

@@ -23,7 +23,7 @@ class _AppRootState extends State<AppRoot> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _controller = AppController(
       storage: StorageService(),
-      extraction: LocalExtractionService(),
+      extraction: HeuristicExtractionService(),
       lock: LockService(),
     );
     _controller.initialize();
@@ -70,10 +70,7 @@ class _AppRootState extends State<AppRoot> with WidgetsBindingObserver {
             colorScheme: lightScheme,
             scaffoldBackgroundColor: const Color(0xFFEEF2EF),
           ),
-          darkTheme: ThemeData(
-            useMaterial3: true,
-            colorScheme: darkScheme,
-          ),
+          darkTheme: ThemeData(useMaterial3: true, colorScheme: darkScheme),
           home: _controller.isLoading
               ? const Scaffold(body: Center(child: CircularProgressIndicator()))
               : _controller.isLocked

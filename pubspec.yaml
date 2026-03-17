@@ -51,6 +51,47 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.3
+  flutter_native_splash: ^2.4.6
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  image_path: assets/image/generated/leave_it_here_logo_icon_safe.png
+  image_path_android: assets/image/generated/leave_it_here_logo_icon_safe.png
+  image_path_ios: assets/image/generated/leave_it_here_logo_icon_safe.png
+  adaptive_icon_foreground: assets/image/generated/leave_it_here_logo_icon_safe.png
+  adaptive_icon_foreground_inset: 20
+  adaptive_icon_background: '#FFFFFF'
+  web:
+    generate: true
+    image_path: assets/image/generated/leave_it_here_logo_icon_safe.png
+    background_color: '#FFFFFF'
+    theme_color: '#FFFFFF'
+  windows:
+    generate: true
+    image_path: assets/image/generated/leave_it_here_logo_icon_safe.png
+    icon_size: 48
+  macos:
+    generate: true
+    image_path: assets/image/generated/leave_it_here_logo_icon_safe.png
+
+flutter_native_splash:
+  color: '#EEF2EF'
+  color_dark: '#1C1F1D'
+  image: assets/image/generated/leave_it_here_logo_splash_safe.png
+  image_dark: assets/image/generated/leave_it_here_logo_splash_safe.png
+  android: true
+  ios: true
+  web: true
+  android_gravity: center
+  ios_content_mode: scaleAspectFit
+  android_12:
+    image: assets/image/generated/leave_it_here_logo_splash_safe.png
+    color: '#EEF2EF'
+    image_dark: assets/image/generated/leave_it_here_logo_splash_safe.png
+    color_dark: '#1C1F1D'
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
