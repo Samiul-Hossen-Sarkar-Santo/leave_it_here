@@ -517,7 +517,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   contentPadding: EdgeInsets.zero,
                   value: c.settings.biometricEnabled,
                   title: const Text('Use biometric when available'),
-                  subtitle: Text(c.biometricStatus),
+                  subtitle: Text(c.biometricAvailable ? 'Available' : 'Unavailable'),
                   onChanged: c.biometricAvailable
                       ? (value) async {
                           await c.updateSettings(
@@ -525,20 +525,6 @@ class _HomeScreenState extends State<HomeScreen> {
                           );
                         }
                       : null,
-                ),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    onPressed: () async {
-                      await c.refreshBiometricAvailability();
-                      if (!mounted) {
-                        return;
-                      }
-                      setState(() {});
-                    },
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Recheck biometric status'),
-                  ),
                 ),
                 const SizedBox(height: 8),
                 Text('Lock timeout: ${c.settings.lockTimeoutMinutes} min'),
