@@ -1,30 +1,83 @@
 # Leave It Here
 
-Leave It Here is a simple, soothing journaling app focused on one goal: helping her see what she has accomplished, especially after difficult days.
+Leave It Here is a local-first journaling app designed for emotionally heavy days and reflection tracking.
 
-## What it does
+## Current app status
 
-- Logs daily journal entries.
-- Lets her record breakdown dates.
-- Uses a lightweight in-app heuristic highlighter to pull meaningful achievements from journal text.
-- Shows accomplishments under each breakdown record so progress is visible over time.
-- Lets users edit wins whenever suggestions do not feel right.
-- Sends a daily reminder to write an entry.
+The app is currently functional with:
 
-## Win extraction behavior
+- A merged Entries experience (create + browse + detail view).
+- Breakdown tracking with reflection views (Grid / Calendar).
+- Voice logging (record audio and save in entries).
+- Manual + heuristic wins support.
+- Per-entry permanent lock and app-level lock.
+- First-install tutorial with replay from Settings.
 
-- The app runs fully offline using an enriched heuristic extractor.
-- Reflection summaries are recomputed only when new entries appear in that breakdown window (or when wins-per-breakdown setting changes).
+## Core features
 
-## Tech details
+### Entries
 
-- Local-first storage with `shared_preferences`.
-- Daily local notifications with `awesome_notifications`.
+- Add new entries from the Entries page hero card.
+- Browse past entries in Grid or List view.
+- Open entry details and edit when not permanently locked.
+- Voice-only entries are saved with fallback text `[Voice entry]`.
+
+### Entry editor
+
+- Write free-form journal text.
+- Mark an entry as a breakdown entry.
+- Add wins via callout dialog (supports multiple wins).
+- Record a voice note and attach it to the entry.
+- Lock forever option is available (new-entry lock-after-save and existing-entry permanent lock).
+
+### Breakdowns
+
+- Log breakdown events and review them in:
+	- Grid mode (card-style overview)
+	- Calendar mode
+- Open a breakdown details view with highlights and edit path (when linked entry is editable).
+
+### Reflection and wins
+
+- Manual wins are always preferred.
+- If manual wins are missing, heuristic extraction generates suggested wins from entry text.
+- Breakdown highlights are computed over the breakdown window and cached.
+
+### Security
+
+- App lock with PIN.
+- Optional biometric unlock.
+- Configurable auto-lock timeout.
+- Entry-level permanent lock (irreversible from UI).
+
+### Tutorial and credits
+
+- Tutorial appears on first install.
+- Tutorial can be reopened from Settings.
+- Credits button opens portfolio URL directly (with clipboard fallback if browser launch fails).
+
+## Architecture and storage
+
+- Local-first persistence: `shared_preferences`
+- Notifications: `awesome_notifications`
+- Audio recording: `record`
+- Audio playback: `just_audio`
+- External URL open: `url_launcher`
 - No backend required.
 
 ## Run
 
 ```bash
 flutter pub get
-flutter run
+flutter run --dart-define-from-file=secrets.local.json
+```
+
+If you do not use a define file, run with plain `flutter run`.
+
+## Build
+
+```bash
+flutter analyze
+flutter test
+flutter build apk --release
 ```
