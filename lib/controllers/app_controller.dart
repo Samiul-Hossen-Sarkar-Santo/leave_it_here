@@ -5,6 +5,7 @@ import '../models/app_settings.dart';
 import '../models/breakdown_record.dart';
 import '../models/journal_entry.dart';
 import '../models/reflection_cache.dart';
+import '../services/backup_service.dart';
 import '../services/extraction_service.dart';
 import '../services/lock_service.dart';
 import '../services/storage_service.dart';
@@ -16,15 +17,18 @@ class AppController extends ChangeNotifier {
     required ExtractionService extraction,
     required LockService lock,
     required VoiceEntryService voice,
+    required BackupService backup,
   }) : _storage = storage,
        _extraction = extraction,
        _lock = lock,
-       _voice = voice;
+       _voice = voice,
+       _backup = backup;
 
   final StorageService _storage;
   final ExtractionService _extraction;
   final LockService _lock;
   final VoiceEntryService _voice;
+  final BackupService _backup;
 
   bool _loading = true;
   bool _locked = false;
@@ -357,6 +361,53 @@ class AppController extends ChangeNotifier {
     }
 
     notifyListeners();
+  }
+
+  Future<String> exportBackupFile() {
+    return _backup.createBackupFile(
+      entries: entries,
+      breakdowns: breakdowns,
+      reflectionCache: reflectionCache,
+      settings: settings,
+    );
+  }
+
+  Future<String> exportBackupToDownloads() async {
+    final tempBackupPath = await exportBackupFile();
+    return _backup.saveBackupToDownloads(tempBackupPath);
+  }
+
+  Future<List<String>> listAvailableBackupFiles() {
+    return _backup.listAvailableBackupFiles();
+  }
+
+  Future<int> importBackupFile(String filePath) async {
+    final imported = await _backup.readBackupFile(filePath);
+
+    final normalizedSettings = imported.settings.copyWith(
+      lockEnabled: false,
+      biometricEnabled: false,
+    );
+
+    entries = [...imported.entries]..sort((a, b) => b.date.compareTo(a.date));
+    breakdowns = [...imported.breakdowns]..sort((a, b) => b.date.compareTo(a.date));
+    reflectionCache = imported.reflectionCache;
+    settings = normalizedSettings;
+
+    await _storage.saveEntries(entries);
+    await _storage.saveBreakdowns(breakdowns);
+    await _storage.saveReflectionCache(reflectionCache);
+    await _storage.saveSettings(settings);
+
+    if (settings.dailyReminderEnabled) {
+      await _scheduleDailyReminder();
+    } else {
+      await AwesomeNotifications().cancel(101);
+    }
+
+    _locked = false;
+    notifyListeners();
+    return imported.restoredAudioFiles;
   }
 
   Future<void> _scheduleDailyReminder() async {

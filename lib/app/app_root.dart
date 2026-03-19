@@ -4,6 +4,7 @@ import '../controllers/app_controller.dart';
 import '../screens/home_screen.dart';
 import '../screens/lock_screen.dart';
 import '../screens/tutorial_screen.dart';
+import '../services/backup_service.dart';
 import '../services/extraction_service.dart';
 import '../services/lock_service.dart';
 import '../services/storage_service.dart';
@@ -28,6 +29,7 @@ class _AppRootState extends State<AppRoot> with WidgetsBindingObserver {
       extraction: HeuristicExtractionService(),
       lock: LockService(),
       voice: VoiceEntryService(),
+      backup: BackupService(),
     );
     _controller.initialize();
   }

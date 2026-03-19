@@ -12,6 +12,7 @@ The app is currently functional with:
 - Manual + heuristic wins support.
 - Per-entry permanent lock and app-level lock.
 - First-install tutorial with replay from Settings.
+- Offline backup export/import for device migration.
 
 ## Core features
 
@@ -50,6 +51,14 @@ The app is currently functional with:
 - Configurable auto-lock timeout.
 - Entry-level permanent lock (irreversible from UI).
 
+### Backup & transfer
+
+- Export a local backup file from Settings.
+- Share that backup file to your other phone (chat, cloud drive, cable, etc.).
+- Import the same backup file on the new device from Settings.
+- Entries, breakdowns, settings, reflection cache, and voice notes are restored.
+- For safety, app lock is turned off after import on the new device; set PIN again if needed.
+
 ### Tutorial and credits
 
 - Tutorial appears on first install.
@@ -63,6 +72,8 @@ The app is currently functional with:
 - Audio recording: `record`
 - Audio playback: `just_audio`
 - External URL open: `url_launcher`
+- File import picker: `file_picker`
+- File sharing: `share_plus`
 - No backend required.
 
 ## Run

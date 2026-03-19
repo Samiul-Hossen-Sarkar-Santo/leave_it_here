@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -22,6 +24,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   AppController get c => widget.controller;
+  bool _isBackupBusy = false;
 
   @override
   Widget build(BuildContext context) {
@@ -437,6 +440,46 @@ class _HomeScreenState extends State<HomeScreen> {
                   icon: const Icon(Icons.schedule),
                   label: const Text('Change reminder time'),
                 ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Data backup & transfer'),
+                const SizedBox(height: 8),
+                const Text(
+                  'Export saves to Downloads/LeaveItHere Backups with a readable timestamped filename. Import on the other device to restore entries, settings, and voice notes.',
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.tonalIcon(
+                        onPressed: _isBackupBusy ? null : _exportBackup,
+                        icon: const Icon(Icons.upload_file_outlined),
+                        label: const Text('Export backup'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton.tonalIcon(
+                        onPressed: _isBackupBusy ? null : _importBackup,
+                        icon: const Icon(Icons.download_outlined),
+                        label: const Text('Import backup'),
+                      ),
+                    ),
+                  ],
+                ),
+                if (_isBackupBusy) ...[
+                  const SizedBox(height: 10),
+                  const LinearProgressIndicator(),
+                ],
               ],
             ),
           ),
@@ -918,6 +961,208 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _exportBackup() async {
+    setState(() {
+      _isBackupBusy = true;
+    });
+
+    try {
+      final backupPath = await c.exportBackupToDownloads();
+
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Backup saved in LeaveItHere Backups:\n$backupPath'),
+        ),
+      );
+    } catch (_) {
+      try {
+        final sharePath = await c.exportBackupFile();
+        await SharePlus.instance.share(
+          ShareParams(
+            files: [XFile(sharePath)],
+            text: 'Leave It Here backup file',
+          ),
+        );
+        if (!mounted) {
+          return;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not save to Downloads on this device. Backup opened in share sheet.',
+            ),
+          ),
+        );
+      } catch (_) {
+        if (!mounted) {
+          return;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not export backup. Please try again.'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isBackupBusy = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _importBackup() async {
+    final knownFiles = await c.listAvailableBackupFiles();
+    if (!mounted) {
+      return;
+    }
+
+    var path = await _pickBackupFromKnownFiles(knownFiles);
+    if (!mounted) {
+      return;
+    }
+
+    if (path == '__browse__') {
+      path = await _pickBackupPathFromSystemPicker();
+      if (!mounted) {
+        return;
+      }
+    }
+
+    if (path == null) {
+      return;
+    }
+
+    if (path.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Selected file is not readable.')),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Import backup?'),
+        content: const Text(
+          'This will replace current local data with data from the selected backup file.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Import'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted || confirmed != true) {
+      return;
+    }
+
+    setState(() {
+      _isBackupBusy = true;
+    });
+
+    try {
+      final restoredAudioFiles = await c.importBackupFile(path);
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Backup imported. Restored $restoredAudioFiles voice files. App lock is disabled on this device; set PIN again if needed.',
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Import failed. Please use a valid backup file.'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isBackupBusy = false;
+        });
+      }
+    }
+  }
+
+  Future<String?> _pickBackupPathFromSystemPicker() async {
+    final selected = await FilePicker.platform.pickFiles(
+      type: FileType.any,
+      allowMultiple: false,
+    );
+    if (selected == null) {
+      return null;
+    }
+    return selected.files.single.path;
+  }
+
+  Future<String?> _pickBackupFromKnownFiles(List<String> paths) async {
+    if (paths.isEmpty) {
+      return _pickBackupPathFromSystemPicker();
+    }
+
+    return showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Select backup file'),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 320,
+          child: ListView.separated(
+            itemCount: paths.length,
+            separatorBuilder: (_, _) => const Divider(height: 1),
+            itemBuilder: (context, index) {
+              final path = paths[index];
+              final display = _fileNameFromPath(path);
+              return ListTile(
+                leading: const Icon(Icons.insert_drive_file_outlined),
+                title: Text(display, maxLines: 1, overflow: TextOverflow.ellipsis),
+                subtitle: Text(path, maxLines: 2, overflow: TextOverflow.ellipsis),
+                onTap: () => Navigator.pop(context, path),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.tonal(
+            onPressed: () => Navigator.pop(context, '__browse__'),
+            child: const Text('Browse files'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _fileNameFromPath(String path) {
+    final normalized = path.replaceAll('\\', '/');
+    final parts = normalized.split('/');
+    if (parts.isEmpty) {
+      return path;
+    }
+    return parts.last;
   }
 
   String _formatDateTime(DateTime date) {
