@@ -259,9 +259,7 @@ class BackupService {
 
     var restoredAudioFiles = 0;
     for (final entry in restoredEntries) {
-      if (entry.audioPath != null && entry.audioPath!.trim().isNotEmpty) {
-        restoredAudioFiles += 1;
-      }
+      restoredAudioFiles += entry.resolvedAudioPaths.length;
     }
 
     return BackupImportData(
@@ -276,25 +274,35 @@ class BackupService {
   Future<Map<String, dynamic>> _collectAudioData(List<JournalEntry> entries) async {
     final out = <String, dynamic>{};
     for (final entry in entries) {
-      final audioPath = entry.audioPath;
-      if (audioPath == null || audioPath.trim().isEmpty) {
+      final paths = entry.resolvedAudioPaths;
+      if (paths.isEmpty) {
         continue;
       }
 
-      final file = File(audioPath);
-      if (!await file.exists()) {
-        continue;
+      final durations = entry.resolvedAudioDurations;
+      final files = <Map<String, dynamic>>[];
+      for (var index = 0; index < paths.length; index += 1) {
+        final audioPath = paths[index];
+        final file = File(audioPath);
+        if (!await file.exists()) {
+          continue;
+        }
+
+        final extIndex = audioPath.lastIndexOf('.');
+        final extension = extIndex == -1
+            ? 'm4a'
+            : audioPath.substring(extIndex + 1).toLowerCase();
+        final bytes = await file.readAsBytes();
+        files.add({
+          'ext': extension,
+          'bytes': base64Encode(bytes),
+          'durationMs': index < durations.length ? durations[index] : null,
+        });
       }
 
-      final extIndex = audioPath.lastIndexOf('.');
-      final extension = extIndex == -1
-          ? 'm4a'
-          : audioPath.substring(extIndex + 1).toLowerCase();
-      final bytes = await file.readAsBytes();
-      out[entry.id] = {
-        'ext': extension,
-        'bytes': base64Encode(bytes),
-      };
+      if (files.isNotEmpty) {
+        out[entry.id] = files;
+      }
     }
     return out;
   }
@@ -312,35 +320,62 @@ class BackupService {
     final restored = <JournalEntry>[];
     for (final entry in entries) {
       final rawAudio = audioFiles[entry.id];
-      if (rawAudio is! Map<String, dynamic>) {
-        restored.add(_entryWithAudioPath(entry, null));
+      final normalized = _normalizeAudioItems(rawAudio);
+      if (normalized.isEmpty) {
+        restored.add(_entryWithAudioPaths(entry, const <String>[], const <int>[]));
         continue;
       }
 
-      final encodedBytes = rawAudio['bytes'];
-      if (encodedBytes is! String || encodedBytes.isEmpty) {
-        restored.add(_entryWithAudioPath(entry, null));
-        continue;
+      final restoredPaths = <String>[];
+      final restoredDurations = <int>[];
+      for (var index = 0; index < normalized.length; index += 1) {
+        final raw = normalized[index];
+        final encodedBytes = raw['bytes'];
+        if (encodedBytes is! String || encodedBytes.isEmpty) {
+          continue;
+        }
+
+        final ext = (raw['ext'] as String?)?.trim();
+        final extension = (ext == null || ext.isEmpty) ? 'm4a' : ext;
+        final filePath =
+            '${audioDir.path}${Platform.pathSeparator}imported_${entry.id}_$index.$extension';
+
+        try {
+          final bytes = base64Decode(encodedBytes);
+          await File(filePath).writeAsBytes(bytes, flush: true);
+          restoredPaths.add(filePath);
+          final duration = raw['durationMs'];
+          if (duration is int) {
+            restoredDurations.add(duration);
+          }
+        } catch (_) {
+          // Skip broken clip but continue restoring other clips.
+        }
       }
 
-      final ext = (rawAudio['ext'] as String?)?.trim();
-      final extension = (ext == null || ext.isEmpty) ? 'm4a' : ext;
-      final filePath =
-          '${audioDir.path}${Platform.pathSeparator}imported_${entry.id}.$extension';
-
-      try {
-        final bytes = base64Decode(encodedBytes);
-        await File(filePath).writeAsBytes(bytes, flush: true);
-        restored.add(_entryWithAudioPath(entry, filePath));
-      } catch (_) {
-        restored.add(_entryWithAudioPath(entry, null));
-      }
+      restored.add(_entryWithAudioPaths(entry, restoredPaths, restoredDurations));
     }
 
     return restored;
   }
 
-  JournalEntry _entryWithAudioPath(JournalEntry source, String? audioPath) {
+  List<Map<String, dynamic>> _normalizeAudioItems(dynamic rawAudio) {
+    if (rawAudio is Map<String, dynamic>) {
+      return [rawAudio];
+    }
+    if (rawAudio is List) {
+      return rawAudio.whereType<Map>().map((item) {
+        return item.map((key, value) => MapEntry(key.toString(), value));
+      }).toList();
+    }
+    return const <Map<String, dynamic>>[];
+  }
+
+  JournalEntry _entryWithAudioPaths(
+    JournalEntry source,
+    List<String> audioPaths,
+    List<int> audioDurationMsList,
+  ) {
     return JournalEntry(
       id: source.id,
       date: source.date,
@@ -350,8 +385,10 @@ class BackupService {
       isBreakdownEntry: source.isBreakdownEntry,
       isPermanentlyLocked: source.isPermanentlyLocked,
       breakdownRecordId: source.breakdownRecordId,
-      audioPath: audioPath,
-      audioDurationMs: source.audioDurationMs,
+      audioPath: audioPaths.isEmpty ? null : audioPaths.first,
+      audioDurationMs: audioDurationMsList.isEmpty ? null : audioDurationMsList.first,
+      audioPaths: audioPaths,
+      audioDurationMsList: audioDurationMsList,
       transcript: source.transcript,
     );
   }

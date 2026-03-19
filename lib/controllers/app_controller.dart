@@ -118,6 +118,8 @@ class AppController extends ChangeNotifier {
     String? transcript,
     String? audioPath,
     int? audioDurationMs,
+    List<String>? audioPaths,
+    List<int>? audioDurationMsList,
   }) async {
     await saveEntry(
       journalText: journalText,
@@ -126,6 +128,8 @@ class AppController extends ChangeNotifier {
       transcript: transcript,
       audioPath: audioPath,
       audioDurationMs: audioDurationMs,
+      audioPaths: audioPaths,
+      audioDurationMsList: audioDurationMsList,
     );
   }
 
@@ -137,10 +141,27 @@ class AppController extends ChangeNotifier {
     String? transcript,
     String? audioPath,
     int? audioDurationMs,
+    List<String>? audioPaths,
+    List<int>? audioDurationMsList,
   }) async {
     final initialText = journalText.trim();
     final transcriptTrimmed = transcript?.trim();
-    final hasAudio = audioPath != null && audioPath.trim().isNotEmpty;
+    final normalizedAudioPaths = (audioPaths ?? const <String>[])
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
+    if (normalizedAudioPaths.isEmpty && audioPath != null && audioPath.trim().isNotEmpty) {
+      normalizedAudioPaths.add(audioPath.trim());
+    }
+
+    final normalizedAudioDurations = (audioDurationMsList ?? const <int>[])
+        .where((item) => item >= 0)
+        .toList();
+    if (normalizedAudioDurations.isEmpty && audioDurationMs != null && audioDurationMs >= 0) {
+      normalizedAudioDurations.add(audioDurationMs);
+    }
+
+    final hasAudio = normalizedAudioPaths.isNotEmpty;
     final hasTranscript = transcriptTrimmed != null && transcriptTrimmed.isNotEmpty;
     if (initialText.isEmpty &&
       !hasTranscript &&
@@ -198,8 +219,22 @@ class AppController extends ChangeNotifier {
       isBreakdownEntry: isBreakdownEntry,
       isPermanentlyLocked: existing?.isPermanentlyLocked ?? false,
       breakdownRecordId: breakdownRecordId,
-      audioPath: audioPath ?? existing?.audioPath,
-      audioDurationMs: audioDurationMs ?? existing?.audioDurationMs,
+        audioPath: normalizedAudioPaths.isNotEmpty
+          ? normalizedAudioPaths.first
+          : (existing?.resolvedAudioPaths.isNotEmpty == true
+            ? existing!.resolvedAudioPaths.first
+            : null),
+        audioDurationMs: normalizedAudioDurations.isNotEmpty
+          ? normalizedAudioDurations.first
+          : (existing?.resolvedAudioDurations.isNotEmpty == true
+            ? existing!.resolvedAudioDurations.first
+            : null),
+        audioPaths: normalizedAudioPaths.isNotEmpty
+          ? normalizedAudioPaths
+          : (existing?.resolvedAudioPaths ?? const <String>[]),
+        audioDurationMsList: normalizedAudioDurations.isNotEmpty
+          ? normalizedAudioDurations
+          : (existing?.resolvedAudioDurations ?? const <int>[]),
       transcript: transcriptTrimmed ?? existing?.transcript,
     );
 
@@ -315,6 +350,14 @@ class AppController extends ChangeNotifier {
 
   Future<VoiceCaptureResult?> stopVoiceCapture() {
     return _voice.stopCapture();
+  }
+
+  Future<bool> pauseVoiceCapture() {
+    return _voice.pauseCapture();
+  }
+
+  Future<bool> resumeVoiceCapture() {
+    return _voice.resumeCapture();
   }
 
   Future<void> cancelVoiceCapture() {

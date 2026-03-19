@@ -10,6 +10,8 @@ class JournalEntry {
     this.breakdownRecordId,
     this.audioPath,
     this.audioDurationMs,
+    this.audioPaths = const <String>[],
+    this.audioDurationMsList = const <int>[],
     this.transcript,
   });
 
@@ -23,7 +25,34 @@ class JournalEntry {
   final String? breakdownRecordId;
   final String? audioPath;
   final int? audioDurationMs;
+  final List<String> audioPaths;
+  final List<int> audioDurationMsList;
   final String? transcript;
+
+  List<String> get resolvedAudioPaths {
+    final items = <String>[];
+    for (final path in audioPaths) {
+      final trimmed = path.trim();
+      if (trimmed.isNotEmpty && !items.contains(trimmed)) {
+        items.add(trimmed);
+      }
+    }
+    final legacy = audioPath?.trim();
+    if (legacy != null && legacy.isNotEmpty && !items.contains(legacy)) {
+      items.add(legacy);
+    }
+    return items;
+  }
+
+  List<int> get resolvedAudioDurations {
+    if (audioDurationMsList.isNotEmpty) {
+      return [...audioDurationMsList];
+    }
+    if (audioDurationMs != null) {
+      return [audioDurationMs!];
+    }
+    return const <int>[];
+  }
 
   JournalEntry copyWith({
     String? id,
@@ -36,6 +65,8 @@ class JournalEntry {
     String? breakdownRecordId,
     String? audioPath,
     int? audioDurationMs,
+    List<String>? audioPaths,
+    List<int>? audioDurationMsList,
     String? transcript,
   }) {
     return JournalEntry(
@@ -49,6 +80,8 @@ class JournalEntry {
       breakdownRecordId: breakdownRecordId ?? this.breakdownRecordId,
       audioPath: audioPath ?? this.audioPath,
       audioDurationMs: audioDurationMs ?? this.audioDurationMs,
+      audioPaths: audioPaths ?? this.audioPaths,
+      audioDurationMsList: audioDurationMsList ?? this.audioDurationMsList,
       transcript: transcript ?? this.transcript,
     );
   }
@@ -62,12 +95,35 @@ class JournalEntry {
     'isBreakdownEntry': isBreakdownEntry,
     'isPermanentlyLocked': isPermanentlyLocked,
     'breakdownRecordId': breakdownRecordId,
-    'audioPath': audioPath,
-    'audioDurationMs': audioDurationMs,
+    'audioPath': audioPath ?? (resolvedAudioPaths.isEmpty ? null : resolvedAudioPaths.first),
+    'audioDurationMs':
+        audioDurationMs ?? (resolvedAudioDurations.isEmpty ? null : resolvedAudioDurations.first),
+    'audioPaths': resolvedAudioPaths,
+    'audioDurationMsList': resolvedAudioDurations,
     'transcript': transcript,
   };
 
   factory JournalEntry.fromJson(Map<String, dynamic> json) {
+    final parsedAudioPaths =
+        ((json['audioPaths'] as List<dynamic>?) ?? const <dynamic>[])
+            .map((item) => item.toString())
+            .where((item) => item.trim().isNotEmpty)
+            .toList();
+
+    final parsedAudioDurations =
+        ((json['audioDurationMsList'] as List<dynamic>?) ?? const <dynamic>[])
+            .map((item) {
+              if (item is int) {
+                return item;
+              }
+              if (item is num) {
+                return item.toInt();
+              }
+              return int.tryParse(item.toString());
+            })
+            .whereType<int>()
+            .toList();
+
     return JournalEntry(
       id: json['id'] as String,
       date: DateTime.parse(json['date'] as String),
@@ -78,8 +134,12 @@ class JournalEntry {
       isBreakdownEntry: json['isBreakdownEntry'] as bool? ?? false,
       isPermanentlyLocked: json['isPermanentlyLocked'] as bool? ?? false,
       breakdownRecordId: json['breakdownRecordId'] as String?,
-      audioPath: json['audioPath'] as String?,
+      audioPath: (json['audioPath'] as String?)?.trim().isEmpty == true
+          ? null
+          : json['audioPath'] as String?,
       audioDurationMs: json['audioDurationMs'] as int?,
+      audioPaths: parsedAudioPaths,
+      audioDurationMsList: parsedAudioDurations,
       transcript: json['transcript'] as String?,
     );
   }

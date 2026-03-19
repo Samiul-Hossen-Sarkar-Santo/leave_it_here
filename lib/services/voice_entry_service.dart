@@ -20,6 +20,7 @@ class VoiceEntryService {
   final Stopwatch _stopwatch = Stopwatch();
 
   bool _capturing = false;
+  bool _paused = false;
 
   Future<bool> startCapture({
     void Function(String transcript)? onTranscript,
@@ -55,7 +56,38 @@ class VoiceEntryService {
       ..start();
 
     _capturing = true;
+    _paused = false;
     return true;
+  }
+
+  Future<bool> pauseCapture() async {
+    if (!_capturing || _paused) {
+      return false;
+    }
+
+    try {
+      await _recorder.pause();
+      _stopwatch.stop();
+      _paused = true;
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> resumeCapture() async {
+    if (!_capturing || !_paused) {
+      return false;
+    }
+
+    try {
+      await _recorder.resume();
+      _stopwatch.start();
+      _paused = false;
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<VoiceCaptureResult?> stopCapture() async {
@@ -72,6 +104,7 @@ class VoiceEntryService {
 
     _stopwatch.stop();
     _capturing = false;
+  _paused = false;
 
     if (audioPath == null || audioPath.trim().isEmpty) {
       return null;
@@ -98,6 +131,7 @@ class VoiceEntryService {
 
     _stopwatch.stop();
     _capturing = false;
+    _paused = false;
 
     if (audioPath != null) {
       final file = File(audioPath);

@@ -43,7 +43,7 @@ class _EntryDetailScreenState extends State<EntryDetailScreen> {
     }
 
     final wins = entry.manualWins.isNotEmpty ? entry.manualWins : entry.smartHighlights;
-    _ensureAudioLoaded(entry.audioPath);
+    final audioPaths = entry.resolvedAudioPaths;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Journal entry')),
@@ -72,14 +72,23 @@ class _EntryDetailScreenState extends State<EntryDetailScreen> {
             const SizedBox(height: 6),
             ...wins.map((item) => Text('• $item')),
           ],
-          if ((entry.audioPath ?? '').trim().isNotEmpty) ...[
+          if (audioPaths.isNotEmpty) ...[
             const SizedBox(height: 16),
-            Text('Voice note', style: Theme.of(context).textTheme.titleSmall),
+            Text('Voice notes', style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 8),
             if (_audioError != null)
               Text(_audioError!)
             else
-              _buildAudioPlayer(entry),
+              ...List.generate(audioPaths.length, (index) {
+                final path = audioPaths[index];
+                final durationMs = index < entry.resolvedAudioDurations.length
+                    ? entry.resolvedAudioDurations[index]
+                    : null;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _buildAudioPlayer(path, durationMs),
+                );
+              }),
           ],
         ],
       ),
@@ -112,26 +121,29 @@ class _EntryDetailScreenState extends State<EntryDetailScreen> {
     );
   }
 
-  Widget _buildAudioPlayer(JournalEntry entry) {
+  Widget _buildAudioPlayer(String path, int? durationMs) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Text(
+              durationMs == null
+                  ? 'Voice clip'
+                  : 'Voice clip (${(durationMs / 1000).toStringAsFixed(1)}s)',
+            ),
+            const SizedBox(height: 8),
             StreamBuilder<PlayerState>(
               stream: _player.playerStateStream,
               builder: (context, snapshot) {
                 final playerState = snapshot.data;
-                final isPlaying = playerState?.playing ?? false;
+                final isPlaying =
+                    (playerState?.playing ?? false) && _loadedAudioPath == path;
 
                 return FilledButton.tonalIcon(
                   onPressed: () async {
-                    if (isPlaying) {
-                      await _player.pause();
-                    } else {
-                      await _player.play();
-                    }
+                    await _togglePlay(path);
                   },
                   icon: Icon(isPlaying ? Icons.pause : Icons.play_arrow),
                   label: Text(isPlaying ? 'Pause' : 'Play'),
@@ -144,7 +156,7 @@ class _EntryDetailScreenState extends State<EntryDetailScreen> {
               builder: (context, snapshot) {
                 final position = snapshot.data ?? Duration.zero;
                 final duration = _player.duration ??
-                    Duration(milliseconds: entry.audioDurationMs ?? 0);
+                  Duration(milliseconds: durationMs ?? 0);
                 final totalMs = duration.inMilliseconds;
                 final posMs = position.inMilliseconds.clamp(0, totalMs == 0 ? 1 : totalMs);
 
@@ -166,22 +178,25 @@ class _EntryDetailScreenState extends State<EntryDetailScreen> {
     );
   }
 
-  void _ensureAudioLoaded(String? audioPath) {
-    if (audioPath == null || audioPath.trim().isEmpty) {
-      return;
-    }
-    if (_loadedAudioPath == audioPath) {
-      return;
-    }
-
-    _loadedAudioPath = audioPath;
-    _audioError = null;
-    _loadAudioPath(audioPath);
-  }
-
-  Future<void> _loadAudioPath(String audioPath) async {
+  Future<void> _togglePlay(String audioPath) async {
     try {
-      await _player.setFilePath(audioPath);
+      if (_loadedAudioPath != audioPath) {
+        await _player.setFilePath(audioPath);
+        _loadedAudioPath = audioPath;
+      }
+
+      if (_player.playing) {
+        await _player.pause();
+      } else {
+        await _player.play();
+      }
+
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _audioError = null;
+      });
     } catch (_) {
       if (!mounted) {
         return;
